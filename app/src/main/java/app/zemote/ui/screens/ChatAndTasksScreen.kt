@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.PlaylistAdd
@@ -361,7 +362,37 @@ private fun TimelineRow(row: ConvRow) {
         ConvKinds.SUBAGENT -> if (row.summaryText.isNotBlank() || row.text.isNotBlank()) {
             ToolCallBlock(row.copy(toolName = "subagent", inputText = row.summaryText.ifBlank { row.text }))
         }
+        // 图片类消息：占位卡片展示，绝不出现加载失败的破图
+        ConvKinds.IMAGE, "screenshot" -> ImagePlaceholder(row)
         else -> Unit
+    }
+}
+
+/** 图片占位卡片（后续接入图片传输后在此渲染真实内容） */
+@Composable
+private fun ImagePlaceholder(row: ConvRow) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.Image,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                row.text.ifBlank { "图片消息" },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
