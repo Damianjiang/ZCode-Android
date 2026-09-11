@@ -24,12 +24,12 @@ object Crc32 {
         var crc: Long = 0xFFFFFFFFL
         for (b in bytes) {
             val idx = ((crc xor b.toLong()) and 0xFFL).toInt()
-            crc = ((TABLE[idx].toLong() xor crc) ushr 8) and 0xFFFFFFFFL
+            crc = (crc ushr 8) xor (TABLE[idx].toLong() and 0xFFFFFFFFL)
         }
-        return crc.toInt()
+        return (crc xor 0xFFFFFFFFL).toInt()
     }
 
-    fun hexOf(bytes: ByteArray): String = compute(bytes).toString(16).padStart(8, '0')
+    fun hexOf(bytes: ByteArray): String = Integer.toHexString(compute(bytes)).padStart(8, '0')
 }
 
 /** HMAC-SHA256 proof calculation.

@@ -147,6 +147,8 @@ fun MainShellScreen(
                     } else {
                         WorkspaceList(
                             client = client,
+                            session = session,
+                            accountId = account.id,
                             onOpen = { ws ->
                                 val key = ws["workspaceIdentity"] as? String
                                     ?: ws["workspacePath"] as? String
@@ -245,6 +247,8 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
 @Composable
 private fun WorkspaceList(
     client: app.zemote.protocol.ZemoteClient,
+    session: AppSessionViewModel,
+    accountId: String,
     onOpen: (Map<String, Any>) -> Unit,
 ) {
     var workspaces by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
@@ -257,8 +261,16 @@ private fun WorkspaceList(
         error = null
         try {
             val result = client.bootstrap()
+            android.util.Log.d("Zemote", "[bootstrap] $result")
             @Suppress("UNCHECKED_CAST")
             workspaces = (result["workspaces"] as? List<Map<String, Any>>) ?: emptyList()
+            // 缓存每个工作区的原始 map（V4 会话握手的 scopeParams 需要）
+            workspaces.forEach { ws ->
+                val key = (ws["workspaceIdentity"] as? String)
+                    ?: (ws["workspacePath"] as? String)
+                    ?: return@forEach
+                session.cacheWorkspaceScope(accountId, key, ws)
+            }
         } catch (e: Exception) {
             error = e.message
         }

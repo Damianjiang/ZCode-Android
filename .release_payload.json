@@ -1,0 +1,8 @@
+{
+  "tag_name": "v1.2.0",
+  "target_commitish": "main",
+  "name": "Zemote v1.2.0",
+  "body": "## Zemote v1.2.0 — 实测修复版 + 任务会话真实数据\n\n### 修复（实测发现）\n- 🐛 **修复添加设备时 App 闪退**：Keystore KeyGenerator 在部分设备上不支持按变换字符串查找，改为显式 AndroidKeyStore 提供者并加兜底\n- 🐛 **修复配对链接 `t` 参数解析**：支持毫秒级（13 位）时间戳，旧实现 Int 溢出直接解析失败\n- 🐛 **修复 rpc-frame CRC32 校验算法错误**（查表移位顺序 + 缺少最终异或），修复后 IPC 通道握手成功\n- ➕ 补全 rpc-frame-ack 应答（缺失会导致服务端判定 rpc-transport-fault）\n- ⏱️ Channel RPC 增加超时保护；V4 调用移至 IO 线程（规避 Compose AndroidUiDispatcher 定时器饥饿）\n\n### 新增\n- 📋 **任务会话页接入真实数据**：运行中 / 历史会话列表（来自 bootstrap tasks）\n- 💬 对话页全新发送栏：圆角胶囊布局 + 附件 / 权限 / 模型 / 深度思考 / 发送-停止\n- 📝 已知限制：对话历史消息的拉取依赖桌面端 V4 会话通道，当前桌面版本（3.8.1）对该通道暂不响应，时间线展示将在后续版本适配\n\n> ⚠️ 本项目为非官方第三方实现，基于对 ZCode Web 远程控制协议的逆向分析，与官方无关，仅供学习研究与自己设备间互联使用。",
+  "draft": false,
+  "prerelease": false
+}

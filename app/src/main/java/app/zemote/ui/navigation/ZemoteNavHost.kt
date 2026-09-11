@@ -111,15 +111,20 @@ fun ZemoteNavHost(
             val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
             TasksScreen(
                 workspaceKey = workspaceKey,
+                session = sessionViewModel,
                 onBack = { navController.popBackStack() },
+                onOpenSession = { sessionId ->
+                    navController.navigate(Screen.Chat.createRoute(workspaceKey, sessionId ?: "new"))
+                },
             )
         }
         composable(Screen.Chat.route) { backStackEntry ->
             val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
-            val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+            val sessionId = backStackEntry.arguments?.getString("sessionId")?.takeIf { it != "new" }
             ChatScreen(
                 workspaceKey = workspaceKey,
                 sessionId = sessionId,
+                session = sessionViewModel,
                 onBack = { navController.popBackStack() },
             )
         }

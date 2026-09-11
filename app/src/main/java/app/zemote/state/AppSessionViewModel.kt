@@ -2,6 +2,7 @@ package app.zemote.state
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.zemote.protocol.ConversationV4Session
 import app.zemote.protocol.ZemoteClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,34 @@ class AppSessionViewModel : ViewModel() {
     private val connections = ConcurrentHashMap<String, ZemoteClient>()
     private val connectMutex = Mutex()
     private val currentAccounts = ConcurrentHashMap<String, Account>()
+    private val conversations = ConcurrentHashMap<String, ConversationV4Session>()
+    private val conversationMutex = Mutex()
+    private val workspaceMaps = ConcurrentHashMap<String, Map<String, Any>>()
+
+    /** MainShell bootstrap 后缓存工作区原始 map（V4 握手的 scopeParams 需要） */
+    fun cacheWorkspaceScope(accountId: String, workspaceKey: String, map: Map<String, Any>) {
+        workspaceMaps["${accountId}|${workspaceKey}"] = map
+    }
+
+    /** 取（或创建）某账号某工作区某任务的 V4 会话仓库；仅在设备已连接后可用。 */
+    suspend fun conversationFor(accountId: String, workspaceKey: String, taskId: String?): ConversationV4Session? {
+        val client = connections[accountId] ?: return null
+        val key = "$accountId|$workspaceKey|${taskId ?: "new"}"
+        conversations[key]?.let { return it }
+        return conversationMutex.withLock {
+            conversations.getOrPut(key) {
+                val scopeParams = workspaceMaps["${accountId}|${workspaceKey}"]
+                ConversationV4Session.open(client, workspaceKey, taskId, scopeParams)
+            }
+        }
+    }
+
+    fun closeConversation(accountId: String, workspaceKey: String) {
+        val prefix = "$accountId|$workspaceKey|"
+        conversations.keys.filter { it.startsWith(prefix) }.forEach { key ->
+            conversations.remove(key)?.dispose()
+        }
+    }
 
     private val _uiState = MutableStateFlow(SessionUiState())
     val uiState: StateFlow<SessionUiState> = _uiState.asStateFlow()
@@ -73,7 +102,7 @@ class AppSessionViewModel : ViewModel() {
                     setStatus(account.id, DeviceStatus(ConnectionState.ERROR, "无法解析连接 URL（需要 sid/hash/t 参数）"))
                     return@withLock
                 }
-                val client = ZemoteClient(params)
+                val client = ZemoteClient(params, onLog = { msg -> android.util.Log.d("Zemote", msg) })
                 try {
                     client.connect()
                     client.waitPaired(timeoutMs = 90_000L)

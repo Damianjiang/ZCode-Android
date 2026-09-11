@@ -22,17 +22,24 @@ object CredentialCipher {
 
     init {
         if (!keyStore.containsAlias(KEY_ALIAS)) {
-            val spec = KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-            )
-                .setBlockModes(BLOCK_MODE)
-                .setEncryptionPaddings(PADDING)
-                .setKeySize(256)
-                .build()
-            KeyGenerator.getInstance("$ALGORITHM/$BLOCK_MODE/$PADDING").apply {
-                init(spec)
-                generateKey()
+            try {
+                val spec = KeyGenParameterSpec.Builder(
+                    KEY_ALIAS,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(BLOCK_MODE)
+                    .setEncryptionPaddings(PADDING)
+                    .setKeySize(256)
+                    .build()
+                // 必须显式指定 AndroidKeyStore 提供者：按变换字符串查找
+                // KeyGenerator 在部分设备上没有注册提供者，会导致 NoSuchAlgorithmException
+                KeyGenerator.getInstance(ALGORITHM, "AndroidKeyStore").apply {
+                    init(spec)
+                    generateKey()
+                }
+            } catch (e: Exception) {
+                // Keystore 不可用时降级：encrypt()/decrypt() 会返回 null，
+                // 上层自动回退明文存储，绝不能让对象初始化失败导致闪退
             }
         }
     }
