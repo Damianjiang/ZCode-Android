@@ -16,6 +16,7 @@ import app.zemote.state.AccountStore
 import app.zemote.state.AppSessionViewModel
 import app.zemote.ui.screens.AccountsScreen
 import app.zemote.ui.screens.ChatScreen
+import app.zemote.ui.screens.ChangelogScreen
 import app.zemote.ui.screens.MainShellScreen
 import app.zemote.ui.screens.SettingsScreen
 import app.zemote.ui.screens.TasksScreen
@@ -58,6 +59,7 @@ sealed class Screen(val route: String) {
         fun createRoute(workspaceKey: String, sessionId: String) = "chat/$workspaceKey/$sessionId"
     }
     object Settings : Screen("settings")
+    object Changelog : Screen("changelog")
 }
 
 @Composable
@@ -131,8 +133,12 @@ fun ZemoteNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
+                onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
                 themeManager = themeManager,
             )
+        }
+        composable(Screen.Changelog.route) {
+            ChangelogScreen(onBack = { navController.popBackStack() })
         }
     }
 }

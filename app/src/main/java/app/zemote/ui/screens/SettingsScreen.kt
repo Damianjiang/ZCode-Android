@@ -1,6 +1,7 @@
 package app.zemote.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.WbSunny
@@ -41,10 +43,11 @@ import androidx.compose.ui.unit.dp
 import app.zemote.BuildConfig
 import app.zemote.ui.theme.ThemeManager
 
-/** 设置页：外观（主题模式分段按钮 + 动态取色）+ 关于（版本） */
+/** 设置页：外观（主题模式分段按钮 + 动态取色）+ 关于（版本 / 更新日志） */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenChangelog: () -> Unit = {},
     themeManager: ThemeManager,
 ) {
     val themeState by themeManager.state.collectAsState()
@@ -129,12 +132,21 @@ fun SettingsScreen(
 
             SectionLabel("关于")
             SettingsCard {
-                SettingRow(
-                    icon = Icons.Rounded.Info,
-                    title = "版本",
-                    subtitle = BuildConfig.VERSION_NAME,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                )
+                Column {
+                    SettingRow(
+                        icon = Icons.Rounded.Info,
+                        title = "版本",
+                        subtitle = BuildConfig.VERSION_NAME,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.HistoryEdu,
+                        title = "更新日志",
+                        subtitle = "查看各版本的更新内容",
+                        onClick = onOpenChangelog,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                }
             }
 
             Text(
@@ -174,10 +186,13 @@ private fun SettingRow(
     title: String,
     subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
