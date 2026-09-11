@@ -27,3 +27,11 @@ Thumbs.db
 
 # 构建产物 APK 只通过 GitHub Releases 分发，不入库
 web-download/app-debug.apk
+
+# 调试截图（根目录的临时 png，screenshots/ 下的 README 截图除外）
+/*.png
+!screenshots/*.png
+
+# 临时 API 推送脚本
+.api_push.py
+.api_push2.py
