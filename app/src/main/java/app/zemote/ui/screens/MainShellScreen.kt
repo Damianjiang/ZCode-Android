@@ -31,7 +31,6 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -72,7 +71,6 @@ fun MainShellScreen(
     onBack: () -> Unit,
     onNavigateToTasks: (String) -> Unit,
     onNavigateToChat: (String, String) -> Unit,
-    onNavigateToSettings: () -> Unit,
 ) {
     val uiState by session.uiState.collectAsState()
     val accounts by store.accounts.collectAsState()
@@ -120,9 +118,6 @@ fun MainShellScreen(
             }
             IconButton(onClick = { showDeviceSheet = true }) {
                 Icon(Icons.Rounded.SwapHoriz, contentDescription = "切换设备")
-            }
-            IconButton(onClick = onNavigateToSettings) {
-                Icon(Icons.Rounded.Settings, contentDescription = "设置")
             }
         }
 
