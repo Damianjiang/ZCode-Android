@@ -33,7 +33,6 @@
 - 🔒 **凭据加密存储** —— Android Keystore AES/GCM 加密，root 后也无法直接读取明文
 - 🌗 **Material You** —— 浅色 / 深色 / 跟随系统，Android 12+ 支持壁纸动态取色
 - 🎨 **M3 Expressive 设计** —— 全新设计的渐变图标、脉冲状态点、弹性转场动画
-- 🌐 **在线检查更新** —— 通过 GitHub Releases 检测新版本
 
 ## 🧱 技术栈
 
@@ -102,7 +101,6 @@ app/src/main/java/app/zemote/
 │   ├── component/               # 脉冲状态点 / 渐变头像等组件
 │   ├── navigation/              # Navigation Compose + M3 转场动画
 │   └── screens/                 # 设备列表 / 工作区 / 任务 / 对话 / 设置
-└── update/UpdateChecker.kt      # GitHub Releases 更新检测（OkHttp）
 ```
 
 ## 🔍 协议逆向说明
@@ -128,7 +126,6 @@ app/src/main/java/app/zemote/
 - [ ] 扫码配对（QR Scanner）
 - [ ] 任务列表与对话流（协议层已就绪，UI 对接中）
 - [ ] 后台保活通知（Foreground Service）
-- [ ] 应用内更新下载安装
 
 ## 🔑 关键词 / Keywords
 
@@ -140,7 +137,7 @@ Jetpack Compose M3、OkHttp WebSocket、协议逆向、protocol reverse engineer
 
 ## 👤 作者
 
-**Damian2012** · 独立开发，出于学习与自用目的对 ZCode 远程控制协议做了逆向与复刻。
+**Damianjiang** · 独立开发，出于学习与自用目的对 ZCode 远程控制协议做了逆向与复刻。
 如果这个项目对你有帮助，欢迎点个 ⭐ Star！
 
 ## 📄 许可证

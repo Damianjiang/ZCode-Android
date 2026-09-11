@@ -1,9 +1,7 @@
 package app.zemote.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,55 +20,41 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Contrast
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.zemote.BuildConfig
 import app.zemote.ui.theme.ThemeManager
-import app.zemote.update.checkForUpdates
-import kotlinx.coroutines.launch
 
-/** 设置页：外观（主题模式分段按钮 + 动态取色）+ 关于（版本 / 检查更新） */
+/** 设置页：外观（主题模式分段按钮 + 动态取色）+ 关于（版本） */
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     themeManager: ThemeManager,
 ) {
     val themeState by themeManager.state.collectAsState()
-    val snackHost = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    var checkingUpdate by remember { mutableStateOf(false) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .statusBarsPadding(),
-        ) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding(),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -145,40 +129,12 @@ fun SettingsScreen(
 
             SectionLabel("关于")
             SettingsCard {
-                Column {
-                    SettingRow(
-                        icon = Icons.Rounded.Info,
-                        title = "版本",
-                        subtitle = BuildConfig.VERSION_NAME,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                    )
-                    SettingRow(
-                        icon = Icons.Rounded.SystemUpdate,
-                        title = "检查更新",
-                        subtitle = if (checkingUpdate) "正在检查…" else "通过 GitHub Releases 检查新版本",
-                        trailing = {
-                            if (checkingUpdate) {
-                                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
-                            }
-                        },
-                        onClick = {
-                            if (checkingUpdate) return@SettingRow
-                            checkingUpdate = true
-                            scope.launch {
-                                val message = try {
-                                    val info = checkForUpdates(BuildConfig.VERSION_NAME)
-                                    if (info.isNewer) "发现新版本 v${info.latestVersion}，可在 GitHub 下载"
-                                    else "已是最新版本（v${BuildConfig.VERSION_NAME}）"
-                                } catch (e: Exception) {
-                                    "检查更新失败：${e.message}"
-                                }
-                                checkingUpdate = false
-                                snackHost.showSnackbar(message)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                    )
-                }
+                SettingRow(
+                    icon = Icons.Rounded.Info,
+                    title = "版本",
+                    subtitle = BuildConfig.VERSION_NAME,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                )
             }
 
             Text(
@@ -188,14 +144,6 @@ fun SettingsScreen(
                 modifier = Modifier.padding(bottom = 28.dp),
             )
         }
-        }
-
-        SnackbarHost(
-            hostState = snackHost,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 20.dp),
-        )
     }
 }
 
@@ -226,13 +174,10 @@ private fun SettingRow(
     title: String,
     subtitle: String? = null,
     trailing: (@Composable () -> Unit)? = null,
-    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
