@@ -4,7 +4,7 @@ package app.zemote.protocol
 data class ZemoteConnectionParams(
     val deviceSid: String,
     val passHash: String,
-    val timestamp: Int,
+    val timestamp: Long,
     val deviceMid: String? = null,
     val deviceName: String? = null,
     val appVersion: String? = null,
@@ -24,7 +24,8 @@ data class ZemoteConnectionParams(
             val hash = uri.getQueryParameter("hash")?.trim()
             val tStr = uri.getQueryParameter("t")?.trim()
             if (sid.isNullOrEmpty() || hash.isNullOrEmpty()) return null
-            val t = tStr?.toIntOrNull() ?: return null
+            // t 可能是秒（10 位）或毫秒（13 位）时间戳，用 Long 避免溢出
+            val t = tStr?.toLongOrNull() ?: return null
             return ZemoteConnectionParams(
                 deviceSid = sid,
                 passHash = hash,

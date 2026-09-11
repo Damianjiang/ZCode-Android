@@ -65,6 +65,7 @@ class ChannelClient(
             if (type == RES_INITIALIZE) {
                 onLog?.invoke("[ipc] initialized")
                 if (!ready.isCompleted) ready.complete(Unit)
+                // 官方客户端对 Initialize 不回包，服务端靠 rpc-frame-ack 判断投递成功
                 return
             }
             if (header.size < 2 || header[1] !is Number) return
@@ -104,11 +105,15 @@ class ChannelClient(
         encodeValue(writer, args)
         // Prepend 13-byte IPC framing header so the assembled message is complete
         sendBody(IpcFraming.encode(writer.toByteArray()))
+        onLog?.invoke("[ipc] awaiting id=$id (timeout=${timeoutMs}ms)")
         val (resType, data) = try {
-            completer.await()
+            kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
         } catch (e: Exception) {
+            promiseHandlers.remove(id)
+            onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
             throw TimeoutException("${channel.channelName}.$method timed out")
         }
+        onLog?.invoke("[ipc] resolved id=$id type=$resType")
         return when (resType) {
             RES_PROMISE_SUCCESS -> data
             RES_PROMISE_ERROR, RES_PROMISE_ERROR_OBJ -> throw ChannelRpcError(data?.toString() ?: "unknown error", data)
