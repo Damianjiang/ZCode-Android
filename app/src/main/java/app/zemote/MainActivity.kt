@@ -12,9 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import app.zemote.crash.CrashHandler
 import app.zemote.state.AccountStore
 import app.zemote.state.AppSessionViewModel
 import app.zemote.ui.navigation.ZemoteNavHost
+import app.zemote.ui.screens.CrashScreen
 import app.zemote.ui.theme.ThemeManager
 import app.zemote.ui.theme.ZemoteTheme
 
@@ -29,6 +31,26 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // 检测上次崩溃：存在崩溃报告则直接进入崩溃页
+        val crashLog = CrashHandler.read(this)
+        if (crashLog != null) {
+            setContent {
+                ZemoteTheme(themeManager = themeManager) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        CrashScreen(
+                            log = crashLog,
+                            onRestart = {
+                                CrashHandler.clear(this)
+                                recreate()
+                            },
+                        )
+                    }
+                }
+            }
+            return
+        }
+
         setContent {
             ZemoteTheme(themeManager = themeManager) {
                 Surface(

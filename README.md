@@ -58,8 +58,8 @@
 ### 方式二：自己构建
 
 ```bash
-git clone https://github.com/Damian2012/zemote-android.git
-cd zemote-android
+git clone https://github.com/Damianjiang/ZCode-Android.git
+cd ZCode-Android
 
 # Linux / macOS
 ./gradlew assembleDebug

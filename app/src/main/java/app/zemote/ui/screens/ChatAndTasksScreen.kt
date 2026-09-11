@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Stop
@@ -318,12 +319,18 @@ fun ChatScreen(
                 onTextChange = { input = it },
                 working = working,
                 enabled = repo != null && error == null,
-                onSend = {
+                onSend = { queued ->
                     val text = input
                     input = ""
                     scope.launch {
-                        runCatching { repo?.sendText(text, activeId) }
-                            .onFailure { input = text }
+                        runCatching {
+                            // AI 回复中 → 官方 queue 语义（排队）；空闲 → startNow
+                            repo?.sendText(
+                                text,
+                                activeId,
+                                requestedDelivery = if (queued) "queue" else "startNow",
+                            )
+                        }.onFailure { input = text }
                     }
                 },
                 onStop = {
@@ -512,7 +519,7 @@ private fun ToolCallBlock(row: ConvRow) {
 
 /**
  * 全新发送栏：一个圆角胶囊容器，上输入、下控制条。
- * 左侧附件入口，右侧 思考 / 模型 / 发送(或停止)。
+ * AI 回复中时输入自动进入队列（官方 queue 语义），停止按钮独立显示。
  */
 @Composable
 private fun ComposerBar(
@@ -520,7 +527,7 @@ private fun ComposerBar(
     onTextChange: (String) -> Unit,
     working: Boolean,
     enabled: Boolean,
-    onSend: () -> Unit,
+    onSend: (queued: Boolean) -> Unit,
     onStop: () -> Unit,
 ) {
     Surface(
@@ -543,7 +550,13 @@ private fun ComposerBar(
                     OutlinedTextField(
                         value = text,
                         onValueChange = onTextChange,
-                        placeholder = { Text("继续输入，@ 可引用上下文", style = MaterialTheme.typography.bodyMedium) },
+                        placeholder = {
+                            Text(
+                                if (working) "AI 正在回复，输入内容将排队发送"
+                                else "继续输入，@ 可引用上下文",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         minLines = 1,
                         maxLines = 5,
@@ -596,29 +609,62 @@ private fun ComposerBar(
                             onClick = { thinkOn = !thinkOn },
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        // 发送 / 停止
-                        FilledIconButton(
-                            onClick = if (working) onStop else onSend,
-                            enabled = enabled && (working || text.isNotBlank()),
-                            shape = CircleShape,
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = if (working) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.primary,
-                                contentColor = if (working) MaterialTheme.colorScheme.onError
-                                else MaterialTheme.colorScheme.onPrimary,
-                            ),
-                            modifier = Modifier.size(44.dp),
-                        ) {
-                            Icon(
-                                if (working) Icons.Rounded.Stop else Icons.AutoMirrored.Rounded.Send,
-                                contentDescription = if (working) "停止" else "发送",
-                                modifier = Modifier.size(20.dp),
-                            )
+                        // 停止（仅 AI 工作中显示）
+                        if (working) {
+                            FilledIconButton(
+                                onClick = onStop,
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
+                                ),
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(Icons.Rounded.Stop, contentDescription = "停止", modifier = Modifier.size(20.dp))
+                            }
+                            if (text.isNotBlank()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                QueueSendButton(onClick = { onSend(true) })
+                            }
+                        } else {
+                            // 发送
+                            FilledIconButton(
+                                onClick = { onSend(false) },
+                                enabled = enabled && text.isNotBlank(),
+                                shape = CircleShape,
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                                modifier = Modifier.size(44.dp),
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.Send,
+                                    contentDescription = "发送",
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** 排队发送按钮：AI 回复中时把输入加入队列 */
+@Composable
+private fun QueueSendButton(onClick: () -> Unit) {
+    FilledIconButton(
+        onClick = onClick,
+        shape = CircleShape,
+        colors = IconButtonDefaults.filledIconButtonColors(
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+        ),
+        modifier = Modifier.size(44.dp),
+    ) {
+        Icon(Icons.Rounded.PlaylistAdd, contentDescription = "排队发送", modifier = Modifier.size(20.dp))
     }
 }
 
