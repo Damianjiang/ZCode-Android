@@ -324,12 +324,3 @@ class ZemoteClient(
         _state.value = ZemoteClientState.CLOSED
     }
 }
-
-/** Well-known channel names (`Wb` enum in the web client). */
-object Channels {
-    const val FILE = "file"
-    const val SYSTEM = "system"
-    const val TERMINAL = "terminal"
-    const val GIT = "git"
-    const val ZCODE_AGENT = "zcode-agent"
-}

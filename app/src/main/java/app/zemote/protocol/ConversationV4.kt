@@ -1,23 +1,13 @@
 package app.zemote.protocol
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
-
-/** 会话列表条目（任务页） */
-data class SessionEntry(
-    val sessionId: String,
-    val topic: String? = null,
-    val status: String? = null,
-    val updatedAt: Long? = null,
-    val running: Boolean = false,
-)
 
 /** bootstrap 返回的任务条目（任务会话页主数据源） */
 data class TaskEntry(
@@ -71,20 +61,15 @@ object ConvKinds {
 }
 
 /**
- * 会话订阅帧里的 ops（与官方 Web 客户端 Ole schema 对应）。
- * row.appended / row.upserted / row.removed / row.delta / state.updated
- */
-private data class ConvOp(val op: String, val row: ConvRow?, val fromRowId: String?, val deltaRowId: String?, val deltaPath: String?, val deltaAppend: String?)
-
-/**
- * Conversation V4 仓库：封装官方 Web 客户端逆向出的 zcode-agent 通道 RPC。
+ * Conversation V4 仓库：封装从官方 Web 客户端逆向出的 zcode-agent 通道 RPC。
  *
- * 调用序列（与官方 `gb()` / subscribe 流程一致）：
- *  1. helloConversationV4() → initializeConversationV4(clientHello)
- *  2. subscribeSessionsIndexV4 + onDynamicSessionsIndexFrame 事件 → 会话列表
- *  3. subscribeConversationV4 + onDynamicConversationFrame 事件 → 对话行 ops
- *  4. conversationRowsRangeV4 → 拉取历史行窗口
- *  5. sendConversationCommandV4(sendText/createSession) → 发送
+ * 会话列表（任务页）走 bootstrap 的 tasks 字段，见 [fetchTasksFromBootstrap]。
+ * 对话行（聊天页）走订阅推送 + 历史窗口：
+ *  - subscribeConversationV4({scope, sessionId}) → {ack:{subscriptionId}}
+ *  - onDynamicConversationFrame 事件推送 ops：row.appended / row.upserted /
+ *    row.removed / row.delta / state.updated
+ *  - conversationRowsRangeV4({scope, sessionId, beforeRowId?, limit}) → 历史行窗口
+ *  - sendConversationCommandV4({scope, envelope}) → 发送（sendText / createSession）
  */
 class ConversationV4Session private constructor(
     val client: ZemoteClient,
@@ -93,35 +78,23 @@ class ConversationV4Session private constructor(
     private val scopeParams: Map<String, Any>? = null,
 ) {
     companion object {
-        private const val APP_VERSION = "unknown"
         private val CLIENT_ID = UUID.randomUUID().toString()
 
-        // ── 3. 对话订阅 + 历史拉取（bridge 绑定 taskId 后服务端才会推送对话）──
+        /** 打开 workspace bridge（可绑定 taskId）并创建会话仓库。 */
         suspend fun open(
             client: ZemoteClient,
             workspaceKey: String,
             taskId: String? = null,
             scopeParams: Map<String, Any>? = null,
-        ): ConversationV4Session = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        ): ConversationV4Session = withContext(Dispatchers.IO) {
             val bridge = client.openBridge(workspaceKey, taskId)
-            val session = ConversationV4Session(client, bridge, workspaceKey, scopeParams)
-            session.startSessionsIndex()
-            session
+            ConversationV4Session(client, bridge, workspaceKey, scopeParams)
         }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val channels get() = bridge.channelsClient
-
-    private var handshaken = false
-    private var connectionId: String? = null
     private var conversationSubscribed = false
-    private var sessionsCancel: (() -> Unit)? = null
     private var conversationCancel: (() -> Unit)? = null
-    private var disposed = false
-
-    private val _sessions = MutableStateFlow<List<SessionEntry>>(emptyList())
-    val sessions: StateFlow<List<SessionEntry>> = _sessions.asStateFlow()
 
     private val _rows = MutableStateFlow<List<ConvRow>>(emptyList())
     val rows: StateFlow<List<ConvRow>> = _rows.asStateFlow()
@@ -132,7 +105,7 @@ class ConversationV4Session private constructor(
     private val _agentWorking = MutableStateFlow(false)
     val agentWorking: StateFlow<Boolean> = _agentWorking.asStateFlow()
 
-    // ── scope 构造：优先用 bootstrap 返回的完整工作区 map（旧方言 hello 需要）──
+    // ── scope 构造：优先用 bootstrap 返回的完整工作区 map ──
     private fun scope(): Map<String, Any> {
         if (scopeParams != null) return scopeParams
         return buildMap {
@@ -141,75 +114,11 @@ class ConversationV4Session private constructor(
         }
     }
 
-    // ── 1. 握手（多通道 × 多方言探测）──
-    private suspend fun handshake() {
-        if (handshaken) return
-        val scopeMap = scope()
-        val appVer = client.params.appVersion ?: "3.8.1"
-        client.onLog?.invoke("[v4] handshake start (scope=$scopeMap)")
-
-        val candidates = listOf("zcode-agent", "agent", "zcode", "zcode-session")
-        // 方案 A（旧方言）：hello 携带 [scope, clientId, appVersion]
-        for (ch in candidates) {
-            val res = runCatching {
-                callOn(ch, "helloConversationV4", listOf(scopeMap, CLIENT_ID, appVer), timeoutMs = 6_000)
-            }.getOrNull()
-            client.onLog?.invoke("[v4] probe ch=$ch old → $res")
-            if (res != null) {
-                probeChannel = ch
-                handshaken = true
-                return
-            }
-        }
-        // 方案 B（新版 Web 方言）：hello() 无参
-        for (ch in candidates) {
-            val res = runCatching {
-                callOn(ch, "helloConversationV4", emptyList(), timeoutMs = 6_000)
-            }.getOrNull()
-            client.onLog?.invoke("[v4] probe ch=$ch new → $res")
-            if (res != null) {
-                probeChannel = ch
-                handshaken = true
-                return
-            }
-        }
-        client.onLog?.invoke("[v4] all hello probes failed")
-    }
-
-    @Volatile
-    private var probeChannel: String? = null
-
-    private suspend fun callOn(channelName: String, method: String, args: List<Any?>, timeoutMs: Int): Any? {
-        val channel = ChannelClient.Channel.entries.firstOrNull { it.channelName == channelName }
-            ?: return null
-        return channels.call(channel, method, args, timeoutMs.toLong())
-    }
-
-    // ── 2. 会话列表订阅 ──
-    private suspend fun startSessionsIndex() {
-        sessionsCancel = channels.addEventListener(
-            ChannelClient.Channel.ZCODE_AGENT,
-            "onDynamicSessionsIndexFrame",
-            onEvent = { frame ->
-                client.onLog?.invoke("[v4] sessions frame: $frame")
-                applySessionsFrame(frame)
-            },
-            // 官方把 scope 作为监听参数传给服务端，服务端据此推送对应工作区
-            arg = scope(),
-        )
-        runCatching {
-            val res = call(
-                "subscribeSessionsIndexV4",
-                listOf(scope() + mapOf("runtimePolicy" to "existing-only")),
-            )
-            client.onLog?.invoke("[v4] subscribeSessionsIndexV4 → $res")
-        }.onFailure { client.onLog?.invoke("[v4] subscribeSessionsIndexV4 failed: $it") }
-    }
-
-    // ── 3. 对话订阅 + 历史拉取 ──
-    // 注意：必须在 IO 上执行。Compose 的 AndroidUiDispatcher 在静态界面不产生帧，
-    // withTimeout 的定时恢复会被饿死（表现为 RPC 永远挂起）。
-    suspend fun openConversation(sessionId: String?) = kotlinx.coroutines.withContext(Dispatchers.IO) {
+    /**
+     * 订阅指定会话并拉取历史。必须在 IO 线程调用（Compose 的
+     * AndroidUiDispatcher 在静态界面不产生帧，withTimeout 会被饿死）。
+     */
+    suspend fun openConversation(sessionId: String?) = withContext(Dispatchers.IO) {
         _activeSessionId.value = sessionId
         _rows.value = emptyList()
         if (!conversationSubscribed) {
@@ -220,16 +129,14 @@ class ConversationV4Session private constructor(
             conversationCancel = channels.addEventListener(
                 ChannelClient.Channel.ZCODE_AGENT,
                 "onDynamicConversationFrame",
-                onEvent = { frame ->
-                    client.onLog?.invoke("[v4] conversation frame: $frame")
-                    applyConversationFrame(frame)
-                },
+                onEvent = { frame -> applyConversationFrame(frame) },
                 arg = subScope,
             )
             runCatching {
-                val res = call("subscribeConversationV4", listOf(subScope))
-                client.onLog?.invoke("[v4] subscribeConversationV4 → $res")
-            }.onFailure { client.onLog?.invoke("[v4] subscribeConversationV4 failed: $it") }
+                call("subscribeConversationV4", listOf(subScope))
+            }.onFailure {
+                client.onLog?.invoke("[v4] subscribeConversationV4 failed: $it")
+            }
             conversationSubscribed = true
         }
         if (sessionId != null) {
@@ -238,37 +145,29 @@ class ConversationV4Session private constructor(
         }
     }
 
-    /** 历史行窗口（分页：beforeRowId 传最早一行 rowId） */
-    suspend fun loadRows(sessionId: String, limit: Int = 120, beforeRowId: String? = null): List<ConvRow> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+    /** 历史行窗口（分页：beforeRowId 传当前最早一行的 rowId） */
+    suspend fun loadRows(sessionId: String, limit: Int = 120, beforeRowId: String? = null): List<ConvRow> = withContext(Dispatchers.IO) {
         val args = scope() + buildMap<String, Any> {
             put("sessionId", sessionId)
             put("limit", limit.toLong())
             if (beforeRowId != null) put("beforeRowId", beforeRowId)
         }
         val res = call("conversationRowsRangeV4", listOf(args)) as? Map<*, *> ?: return@withContext _rows.value
-        val window = (res["rows"] as? Map<*, *>) ?: res
-        val list = (window["rows"] as? List<*>) ?: (res["rows"] as? List<*>) ?: return@withContext _rows.value
-        val parsed = list.mapNotNull { parseRow(it) }
-        mergeRows(parsed)
+        val container = (res["rows"] as? Map<*, *>) ?: res
+        val list = container["rows"] as? List<*> ?: return@withContext _rows.value
+        mergeRows(list.mapNotNull(::parseRow))
         _rows.value
     }
 
-    // ── 4. 发送 ──
-    private fun envelope(sessionId: String?, type: String, payload: Map<String, Any>): Map<String, Any> = buildMap {
-        put("commandId", UUID.randomUUID().toString())
-        put("clientId", CLIENT_ID)
-        if (sessionId != null) put("sessionId", sessionId)
-        put("type", type)
-        put("payload", payload)
-        put("issuedAt", System.currentTimeMillis())
-    }
-
-    /** 发送用户文本。sessionId 为空时先 createSession，返回（新）sessionId。 */
+    /**
+     * 发送用户文本。sessionId 为空时先 createSession 并返回新 sessionId。
+     * AI 回复中传 requestedDelivery = "queue"（官方排队语义）。
+     */
     suspend fun sendText(
         text: String,
         sessionId: String? = _activeSessionId.value,
         requestedDelivery: String = "startNow",
-    ): String? = kotlinx.coroutines.withContext(Dispatchers.IO) {
+    ): String? = withContext(Dispatchers.IO) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return@withContext sessionId
         var target = sessionId
@@ -291,50 +190,46 @@ class ConversationV4Session private constructor(
         target
     }
 
-    // ── 帧处理 ──
-    private fun applySessionsFrame(frame: Any?) {
-        val entries = mutableListOf<SessionEntry>()
-        walkMaps(frame) { m ->
-            val sid = m["sessionId"] as? String
-            if (!sid.isNullOrEmpty() && m.keys.any { it == "topic" || it == "status" || it == "updatedAt" || it == "title" }) {
-                entries.add(parseSession(m))
-            }
-        }
-        if (entries.isNotEmpty()) {
-            val byId = _sessions.value.associateBy { it.sessionId }.toMutableMap()
-            entries.forEach { byId[it.sessionId] = it }
-            _sessions.value = byId.values.sortedWith(
-                compareByDescending<SessionEntry> { it.running }.thenByDescending { it.updatedAt ?: 0L }
+    /**
+     * 停止当前生成。官方命令集合（sendText/sendGoalCommand/…）中未见独立 stop
+     * 类型，此处按惯例发送 interrupt，属尽力而为。
+     */
+    suspend fun stop(sessionId: String? = _activeSessionId.value) = withContext(Dispatchers.IO) {
+        if (sessionId == null) return@withContext
+        runCatching {
+            call(
+                "sendConversationCommandV4",
+                listOf(scope() + mapOf("envelope" to envelope(sessionId, "interrupt", emptyMap()))),
             )
         }
     }
 
-    private fun parseSession(m: Map<*, *>): SessionEntry {
-        val status = (m["status"] as? String) ?: (m["state"] as? String)
-        val updated = (m["updatedAt"] as? Number)?.toLong()
-            ?: (m["lastActivityAt"] as? Number)?.toLong()
-            ?: (m["timestamp"] as? Number)?.toLong()
-        return SessionEntry(
-            sessionId = m["sessionId"]?.toString() ?: "",
-            topic = (m["topic"] as? String) ?: (m["title"] as? String) ?: (m["name"] as? String),
-            status = status,
-            updatedAt = updated,
-            running = status?.contains("running", ignoreCase = true) == true
-                    || status?.contains("active", ignoreCase = true) == true
-                    || m["running"] == true,
-        )
+    // ── 信封 ──
+    private fun envelope(sessionId: String?, type: String, payload: Map<String, Any>): Map<String, Any> = buildMap {
+        put("commandId", UUID.randomUUID().toString())
+        put("clientId", CLIENT_ID)
+        if (sessionId != null) put("sessionId", sessionId)
+        put("type", type)
+        put("payload", payload)
+        put("issuedAt", System.currentTimeMillis())
     }
 
+    private fun extractNewSessionId(res: Map<*, *>?): String? {
+        val result = res?.get("result") as? Map<*, *> ?: res ?: return null
+        if (result["type"] == "createSession") return result["sessionId"]?.toString()
+        return null
+    }
+
+    // ── 订阅帧处理（与官方 ops schema 对应）──
     private fun applyConversationFrame(frame: Any?) {
-        val root = frame as? Map<*, *> ?: return
-        val ops = root["ops"] as? List<*> ?: return
+        val ops = (frame as? Map<*, *>)?.get("ops") as? List<*> ?: return
         for (op in ops) {
             val m = op as? Map<*, *> ?: continue
             when (m["op"] as? String) {
-                "row.appended", "row.upserted" -> parseRow(m["row"])?.let { mergeRow(it) }
+                "row.appended", "row.upserted" -> parseRow(m["row"])?.let(::mergeRow)
                 "row.removed" -> {
-                    val from = m["fromRowId"] as? String ?: continue
-                    _rows.update { list -> list.filterNot { it.rowId >= from && it.rowId.startsWith(from.take(8)) } }
+                    val from = m["fromRowId"]?.toString() ?: continue
+                    _rows.update { list -> list.filterNot { it.rowId >= from } }
                 }
                 "row.delta" -> {
                     val rid = m["rowId"]?.toString() ?: continue
@@ -389,32 +284,10 @@ class ConversationV4Session private constructor(
 
     private fun mergeRow(row: ConvRow) = mergeRows(listOf(row))
 
-    private fun extractNewSessionId(res: Map<*, *>?): String? {
-        val result = res?.get("result") as? Map<*, *> ?: res
-        if ((result?.get("type") as? String) == "createSession") {
-            return result["sessionId"]?.toString()
-        }
-        return null
-    }
-
-    /** 深度优先收集所有含 sessionId 的 map（会话帧结构未完全公开，做防御性解析） */
-    private fun walkMaps(node: Any?, visit: (Map<*, *>) -> Unit) {
-        when (node) {
-            is Map<*, *> -> {
-                visit(node)
-                node.values.forEach { walkMaps(it, visit) }
-            }
-            is List<*> -> node.forEach { walkMaps(it, visit) }
-        }
-    }
-
-    private suspend fun call(method: String, args: List<Any?>, timeoutMs: Int = 30_000): Any? =
-        channels.call(ChannelClient.Channel.ZCODE_AGENT, method, args, timeoutMs.toLong())
+    private suspend fun call(method: String, args: List<Any?>, timeoutMs: Long = 30_000): Any? =
+        channels.call(ChannelClient.Channel.ZCODE_AGENT, method, args, timeoutMs)
 
     fun dispose() {
-        if (disposed) return
-        disposed = true
-        sessionsCancel?.invoke()
         conversationCancel?.invoke()
         bridge.dispose()
     }

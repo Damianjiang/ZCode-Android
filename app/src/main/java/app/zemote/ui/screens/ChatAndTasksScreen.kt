@@ -74,7 +74,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.zemote.protocol.ConvKinds
 import app.zemote.protocol.ConvRow
-import app.zemote.protocol.SessionEntry
+import app.zemote.protocol.TaskEntry
 import app.zemote.state.AppSessionViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -265,11 +265,12 @@ fun ChatScreen(
             onBack = onBack,
         )
 
-        if (error != null) {
+        val errorMessage = error
+        if (errorMessage != null) {
             CenterHint(
                 icon = { Icon(Icons.Rounded.SmartToy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(44.dp)) },
                 title = "无法打开对话",
-                body = error!!,
+                body = errorMessage,
             )
         } else {
             LazyColumn(
@@ -334,7 +335,7 @@ fun ChatScreen(
                     }
                 },
                 onStop = {
-                    scope.launch { runCatching { repo?.sendText("/interrupt", activeId, requestedDelivery = "startNow") } }
+                    scope.launch { runCatching { repo?.stop(activeId) } }
                 },
             )
         }

@@ -108,6 +108,10 @@ class ChannelClient(
         onLog?.invoke("[ipc] awaiting id=$id (timeout=${timeoutMs}ms)")
         val (resType, data) = try {
             kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            // 协程被取消（页面离开等）时必须原样上抛，不能吞成超时
+            promiseHandlers.remove(id)
+            throw e
         } catch (e: Exception) {
             promiseHandlers.remove(id)
             onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
