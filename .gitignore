@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+
+# Kotlin
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Local configuration（含本机 SDK 路径，勿提交）
+local.properties
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+nul
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 构建产物 APK 只通过 GitHub Releases 分发，不入库
+web-download/app-debug.apk
