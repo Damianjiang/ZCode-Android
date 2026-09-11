@@ -58,6 +58,7 @@ object ConvKinds {
     const val REASONING = "reasoning"
     const val TOOL_CALL = "toolCall"
     const val SUBAGENT = "subagent"
+    const val IMAGE = "image"
 }
 
 /**
