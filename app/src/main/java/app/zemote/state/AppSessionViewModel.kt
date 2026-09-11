@@ -133,6 +133,10 @@ class AppSessionViewModel : ViewModel() {
             if (_uiState.value.activeId == accountId) {
                 _uiState.update { it.copy(activeId = null) }
             }
+            // 断开设备时释放其所有 V4 会话（含 bridge 订阅）
+            conversations.keys.filter { it.startsWith("$accountId|") }.forEach { key ->
+                conversations.remove(key)?.dispose()
+            }
             conn?.dispose()
         }
     }
@@ -141,6 +145,8 @@ class AppSessionViewModel : ViewModel() {
         viewModelScope.launch {
             connections.values.forEach { it.dispose() }
             connections.clear()
+            conversations.values.forEach { it.dispose() }
+            conversations.clear()
             _uiState.value = SessionUiState()
         }
     }

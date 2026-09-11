@@ -32,7 +32,6 @@ class RpcFrameTransport(
 
     private var seq = 0
     private var messageSeq = 0
-    private var debugFrames = 0
 
     private val assemblies = mutableMapOf<Int, Assembly>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -92,17 +91,6 @@ class RpcFrameTransport(
         val type = payload["zcode_type"] as? String ?: return false
         if (type != "rpc-frame" && type != "rpc-frame-ack") return false
 
-        // 临时诊断：打印服务端 rpc-frame 的真实字段（前 12 帧）
-        if (debugFrames < 12) {
-            debugFrames++
-            onLog?.invoke(
-                "[rpc] in-frame #$debugFrames keys=${payload.keys.filter { it != "dataBase64" }} " +
-                    "kind=${payload["kind"]} ord=${payload["logicalFrameOrdinal"]} msgSeq=${payload["messageSeq"]} " +
-                    "fIdx=${payload["fragmentIndex"]}/${payload["fragmentCount"]} " +
-                    "bytes=${payload["messageBytes"]}/${payload["logicalBytes"]} crc=${payload["checksum"]}"
-            )
-        }
-
         @Suppress("UNCHECKED_CAST")
         val dataBase64 = payload["dataBase64"] as? String
         val msgSeqVal = (payload["messageSeq"] as? Number)?.toInt() ?: return false
@@ -140,10 +128,7 @@ class RpcFrameTransport(
             // Verify CRC32
             val actualChecksum = Crc32.hexOf(assembled)
             if (actualChecksum != assembly.crc32) {
-                onLog?.invoke(
-                    "[rpc] CRC32 mismatch for msg $msgSeqVal: expected=${assembly.crc32} actual=$actualChecksum " +
-                        "b64=${payload["dataBase64"]} hex=${assembled.joinToString("") { "%02x".format(it) }}"
-                )
+                onLog?.invoke("[rpc] CRC32 mismatch for msg $msgSeqVal (expected=${assembly.crc32} actual=$actualChecksum)")
                 assemblies.remove(msgSeqVal)
                 return true
             }
