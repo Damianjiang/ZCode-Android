@@ -35,3 +35,6 @@ web-download/app-debug.apk
 # 临时 API 推送脚本
 .api_push.py
 .api_push2.py
+
+# 官方 JS 逆向分析产物（不入库）
+.webref/
