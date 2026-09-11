@@ -37,7 +37,6 @@ import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.LinkOff
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.QrCodeScanner
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -90,7 +89,6 @@ fun AccountsScreen(
     store: AccountStore,
     session: AppSessionViewModel,
     onNavigateToShell: (Account) -> Unit,
-    onNavigateToSettings: () -> Unit,
 ) {
     var showAddSheet by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Account?>(null) }
@@ -107,11 +105,11 @@ fun AccountsScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Hero 头部：大标题 + 设置入口
+            // Hero 头部：大标题
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 24.dp, end = 12.dp, top = 20.dp, bottom = 8.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -125,9 +123,6 @@ fun AccountsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                FilledIconCircle(onClick = onNavigateToSettings) {
-                    Icon(Icons.Rounded.Settings, contentDescription = "设置", modifier = Modifier.size(20.dp))
                 }
             }
 
@@ -219,19 +214,6 @@ fun AccountsScreen(
             },
             onDismiss = { renameTarget = null },
         )
-    }
-}
-
-/** 圆形填充图标按钮（页面右上角入口） */
-@Composable
-fun FilledIconCircle(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.size(42.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) { content() }
     }
 }
 

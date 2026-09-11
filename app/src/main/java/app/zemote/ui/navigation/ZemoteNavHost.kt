@@ -6,8 +6,8 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -17,38 +17,30 @@ import app.zemote.state.AppSessionViewModel
 import app.zemote.ui.screens.AccountsScreen
 import app.zemote.ui.screens.ChatScreen
 import app.zemote.ui.screens.ChangelogScreen
+import app.zemote.ui.screens.MainScreen
 import app.zemote.ui.screens.MainShellScreen
-import app.zemote.ui.screens.SettingsScreen
+import app.zemote.ui.screens.PersonalizeScreen
 import app.zemote.ui.screens.TasksScreen
 import app.zemote.ui.theme.ThemeManager
 
-// M3 强调曲线：进入用减速曲线「冲进来」，退出用加速曲线「加速离场」
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
-private const val AnimDuration = 340
+/**
+ * M3「Fade Through」转场：新页面淡入 + 轻微放大，旧页面快速淡出。
+ * 相比双向滑动更顺滑，没有背景闪动。
+ */
+private const val DurIn = 260
+private const val DurOut = 110
+private val Decelerate = CubicBezierEasing(0.1f, 0.7f, 0.1f, 1f)
+private val Accelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
-private fun forwardEnter(): EnterTransition = slideInHorizontally(
-    animationSpec = tween(AnimDuration, easing = EmphasizedDecelerate),
-    initialOffsetX = { it / 4 },
-) + fadeIn(tween(AnimDuration, easing = EmphasizedDecelerate))
+private fun enterThrough(): EnterTransition = fadeIn(tween(DurIn, delayMillis = DurOut / 2)) +
+    scaleIn(initialScale = 0.92f, animationSpec = tween(DurIn, easing = Decelerate))
 
-private fun forwardExit(): ExitTransition = slideOutHorizontally(
-    animationSpec = tween(AnimDuration, easing = EmphasizedAccelerate),
-    targetOffsetX = { -it / 6 },
-) + fadeOut(tween(AnimDuration, easing = EmphasizedAccelerate))
-
-private fun backEnter(): EnterTransition = slideInHorizontally(
-    animationSpec = tween(AnimDuration, easing = EmphasizedDecelerate),
-    initialOffsetX = { -it / 6 },
-) + fadeIn(tween(AnimDuration, easing = EmphasizedDecelerate))
-
-private fun backExit(): ExitTransition = slideOutHorizontally(
-    animationSpec = tween(AnimDuration, easing = EmphasizedAccelerate),
-    targetOffsetX = { it / 4 },
-) + fadeOut(tween(AnimDuration, easing = EmphasizedAccelerate))
+private fun exitThrough(): ExitTransition = fadeOut(tween(DurOut, easing = Accelerate))
 
 sealed class Screen(val route: String) {
-    object Accounts : Screen("accounts")
+    object Main : Screen("main")
+    object Personalize : Screen("personalize")
+    object Changelog : Screen("changelog")
     object MainShell : Screen("main_shell/{accountId}") {
         fun createRoute(accountId: String) = "main_shell/$accountId"
     }
@@ -58,8 +50,6 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat/{workspaceKey}/{sessionId}") {
         fun createRoute(workspaceKey: String, sessionId: String) = "chat/$workspaceKey/$sessionId"
     }
-    object Settings : Screen("settings")
-    object Changelog : Screen("changelog")
 }
 
 @Composable
@@ -72,23 +62,28 @@ fun ZemoteNavHost(
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Accounts.route,
-        enterTransition = { forwardEnter() },
-        exitTransition = { forwardExit() },
-        popEnterTransition = { backEnter() },
-        popExitTransition = { backExit() },
+        startDestination = Screen.Main.route,
+        enterTransition = { enterThrough() },
+        exitTransition = { exitThrough() },
+        popEnterTransition = { enterThrough() },
+        popExitTransition = { exitThrough() },
     ) {
-        composable(Screen.Accounts.route) {
-            AccountsScreen(
+        composable(Screen.Main.route) {
+            MainScreen(
                 store = accountStore,
                 session = sessionViewModel,
                 onNavigateToShell = { account ->
                     navController.navigate(Screen.MainShell.createRoute(account.id))
                 },
-                onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
-                }
+                onOpenPersonalize = { navController.navigate(Screen.Personalize.route) },
+                onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
             )
+        }
+        composable(Screen.Personalize.route) {
+            PersonalizeScreen(onBack = { navController.popBackStack() }, themeManager = themeManager)
+        }
+        composable(Screen.Changelog.route) {
+            ChangelogScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.MainShell.route) { backStackEntry ->
             val accountId = backStackEntry.arguments?.getString("accountId") ?: return@composable
@@ -106,7 +101,6 @@ fun ZemoteNavHost(
                 onNavigateToChat = { workspaceKey, sessionId ->
                     navController.navigate(Screen.Chat.createRoute(workspaceKey, sessionId))
                 },
-                onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
             )
         }
         composable(Screen.Tasks.route) { backStackEntry ->
@@ -129,16 +123,6 @@ fun ZemoteNavHost(
                 session = sessionViewModel,
                 onBack = { navController.popBackStack() },
             )
-        }
-        composable(Screen.Settings.route) {
-            SettingsScreen(
-                onBack = { navController.popBackStack() },
-                onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
-                themeManager = themeManager,
-            )
-        }
-        composable(Screen.Changelog.route) {
-            ChangelogScreen(onBack = { navController.popBackStack() })
         }
     }
 }

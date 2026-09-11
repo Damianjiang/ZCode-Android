@@ -14,10 +14,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** 主题设置快照：模式（浅色/深色/跟随系统）+ 是否启用 Android 12+ 动态取色 */
+/** 主题设置快照：模式（浅色/深色/跟随系统）+ 动态取色 + 品牌色盘 */
 data class ThemeState(
     val mode: ThemeManager.ThemeMode = ThemeManager.ThemeMode.FOLLOW_SYSTEM,
     val dynamicColor: Boolean = true,
+    val palette: String = "iris",
 )
 
 /**
@@ -31,6 +32,7 @@ class ThemeManager(private val dataStore: DataStore<Preferences>) {
     companion object {
         private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
         private val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
+        private val PALETTE_KEY = stringPreferencesKey("theme_palette")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,7 +40,11 @@ class ThemeManager(private val dataStore: DataStore<Preferences>) {
     val state: StateFlow<ThemeState> = dataStore.data.map { prefs ->
         val mode = prefs[THEME_MODE_KEY]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
             ?: ThemeMode.FOLLOW_SYSTEM
-        ThemeState(mode = mode, dynamicColor = prefs[DYNAMIC_COLOR_KEY] ?: true)
+        ThemeState(
+            mode = mode,
+            dynamicColor = prefs[DYNAMIC_COLOR_KEY] ?: true,
+            palette = prefs[PALETTE_KEY] ?: "iris",
+        )
     }.stateIn(scope, SharingStarted.Eagerly, ThemeState())
 
     fun setMode(mode: ThemeMode) {
@@ -47,5 +53,9 @@ class ThemeManager(private val dataStore: DataStore<Preferences>) {
 
     fun setDynamicColor(enabled: Boolean) {
         scope.launch { dataStore.edit { it[DYNAMIC_COLOR_KEY] = enabled } }
+    }
+
+    fun setPalette(key: String) {
+        scope.launch { dataStore.edit { it[PALETTE_KEY] = key } }
     }
 }
