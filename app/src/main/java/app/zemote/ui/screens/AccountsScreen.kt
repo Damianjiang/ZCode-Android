@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -67,6 +69,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -95,6 +99,7 @@ fun AccountsScreen(
     val accounts by store.accounts.collectAsState()
     val uiState by session.uiState.collectAsState()
     val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
     val snackHost = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) { store.load() }
@@ -114,12 +119,12 @@ fun AccountsScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "设备",
+                        stringResource(R.string.devices),
                         style = MaterialTheme.typography.displaySmall,
                         color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
-                        "连接你的桌面 ZCode",
+                        stringResource(R.string.connect_your_desktop),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -159,7 +164,7 @@ fun AccountsScreen(
                                     if (session.isConnected(account.id)) session.disconnect(account.id)
                                     scope.launch {
                                         store.remove(account.id)
-                                        snackHost.showSnackbar("已删除「${account.label}」")
+                                        snackHost.showSnackbar(ctx.getString(R.string.deleted_toast, account.label))
                                     }
                                 },
                                 modifier = Modifier.animateItem(),
@@ -173,7 +178,7 @@ fun AccountsScreen(
         ExtendedFloatingActionButton(
             onClick = { showAddSheet = true },
             icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
-            text = { Text("添加设备") },
+            text = { Text(stringResource(R.string.add_device)) },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
@@ -187,18 +192,21 @@ fun AccountsScreen(
         )
     }
 
+    val qrHintText = stringResource(R.string.qr_hint)
+    val deviceAddedText = stringResource(R.string.device_added)
+
     if (showAddSheet) {
         AddDeviceBottomSheet(
             onDismiss = { showAddSheet = false },
             onScan = {
-                scope.launch { snackHost.showSnackbar("扫码功能需相机依赖，可手动粘贴远程控制链接添加设备") }
+                scope.launch { snackHost.showSnackbar(qrHintText) }
             },
             onUrlSubmit = { url, label ->
                 showAddSheet = false
                 if (url.trim().isEmpty()) return@AddDeviceBottomSheet
                 scope.launch {
                     store.addAccount(url.trim(), label.takeIf { it.isNotBlank() })
-                    snackHost.showSnackbar("设备已添加")
+                    snackHost.showSnackbar(deviceAddedText)
                 }
             }
         )
@@ -255,7 +263,7 @@ private fun EmptyStateContent(onAdd: () -> Unit, modifier: Modifier = Modifier) 
             )
         }
         Spacer(modifier = Modifier.height(28.dp))
-        Text("还没有设备", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.no_devices_yet), style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "把桌面 ZCode 的远程控制链接粘贴进来，\n或扫描配对二维码，随时随地去连。",
@@ -271,7 +279,7 @@ private fun EmptyStateContent(onAdd: () -> Unit, modifier: Modifier = Modifier) 
         ) {
             Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("添加第一台设备")
+            Text(stringResource(R.string.add_first_device))
         }
     }
 }
@@ -352,7 +360,7 @@ private fun AccountCard(
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 Icons.Rounded.LinkOff,
-                                contentDescription = "断开",
+                                contentDescription = stringResource(R.string.disconnect),
                                 tint = if (active) MaterialTheme.colorScheme.onPrimaryContainer
                                 else MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.size(18.dp),
@@ -369,7 +377,7 @@ private fun AccountCard(
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 Icons.Rounded.Bolt,
-                                contentDescription = "连接",
+                                contentDescription = stringResource(R.string.connect),
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(20.dp),
                             )
@@ -382,18 +390,18 @@ private fun AccountCard(
                 IconButton(onClick = { menuOpen = true }) {
                     Icon(
                         Icons.Rounded.MoreHoriz,
-                        contentDescription = "更多",
+                        contentDescription = stringResource(R.string.more),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(
-                        text = { Text("重命名") },
+                        text = { Text(stringResource(R.string.rename)) },
                         leadingIcon = { Icon(Icons.Rounded.DriveFileRenameOutline, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         onClick = { menuOpen = false; onRename() },
                     )
                     DropdownMenuItem(
-                        text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = {
                             Icon(
                                 Icons.Rounded.Delete,
@@ -415,7 +423,7 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("重命名设备") },
+        title = { Text(stringResource(R.string.rename_device)) },
         text = {
             OutlinedTextField(
                 value = text,
@@ -425,10 +433,10 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text("保存") }
+            TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text(stringResource(R.string.save)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }
@@ -455,12 +463,12 @@ private fun AddDeviceBottomSheet(
                 .padding(horizontal = 22.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("添加设备", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.add_device), style = MaterialTheme.typography.headlineSmall)
 
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
-                label = { Text("远程控制 URL") },
+                label = { Text(stringResource(R.string.remote_url)) },
                 placeholder = {
                     Text(
                         "https://…?sid=…&hash=…&t=…",
@@ -471,7 +479,7 @@ private fun AddDeviceBottomSheet(
                 minLines = 2,
                 maxLines = 4,
                 textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                supportingText = { Text("从桌面 ZCode 复制远程控制链接") },
+                supportingText = { Text(stringResource(R.string.remote_url_hint)) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
                 shape = RoundedCornerShape(16.dp),
@@ -481,7 +489,7 @@ private fun AddDeviceBottomSheet(
             OutlinedTextField(
                 value = label,
                 onValueChange = { label = it },
-                label = { Text("设备名称（可选）") },
+                label = { Text(stringResource(R.string.device_name_optional)) },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -495,7 +503,7 @@ private fun AddDeviceBottomSheet(
                 ) {
                     Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("扫码添加")
+                    Text(stringResource(R.string.scan_add))
                 }
                 Button(
                     onClick = { if (url.isNotBlank()) onUrlSubmit(url, label) },
@@ -504,7 +512,7 @@ private fun AddDeviceBottomSheet(
                     colors = ButtonDefaults.buttonColors(),
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("添加设备")
+                    Text(stringResource(R.string.add_device))
                 }
             }
 

@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -49,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.zemote.state.Account
@@ -118,7 +121,7 @@ fun MainShellScreen(
                 }
             }
             IconButton(onClick = { showDeviceSheet = true }) {
-                Icon(Icons.Rounded.SwapHoriz, contentDescription = "切换设备")
+                Icon(Icons.Rounded.SwapHoriz, contentDescription = stringResource(R.string.switch_device))
             }
         }
 
@@ -133,13 +136,13 @@ fun MainShellScreen(
             when (state) {
                 ConnectionState.CONNECTING -> ConnectingContent(account)
                 ConnectionState.ERROR -> ErrorContent(
-                    message = status.message ?: "连接失败",
+                    message = status.message ?: stringResource(R.string.connect_failed),
                     onRetry = { session.connect(account) },
                 )
                 else -> {
                     val client = session.clientOf(account.id)
                     if (client == null) {
-                        ErrorContent(message = "设备尚未连接", onRetry = { session.connect(account) })
+                        ErrorContent(message = stringResource(R.string.device_not_connected), onRetry = { session.connect(account) })
                     } else {
                         WorkspaceList(
                             client = client,
@@ -196,10 +199,10 @@ private fun ConnectingContent(account: Account) {
             DeviceAvatar(id = account.id, iconSize = 34, corner = 24)
         }
         Spacer(modifier = Modifier.height(24.dp))
-        Text("正在配对「${account.label}」", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.pairing_with, account.label), style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            "与桌面端安全握手中，首次连接最长需 90 秒",
+            stringResource(R.string.pairing_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -222,7 +225,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
             modifier = Modifier.size(52.dp),
         )
         Spacer(modifier = Modifier.height(16.dp))
-        Text("连接失败", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.connect_failed), style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             message,
@@ -235,7 +238,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
         Button(onClick = onRetry, shape = RoundedCornerShape(14.dp)) {
             Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("重试连接")
+            Text(stringResource(R.string.retry_connect))
         }
     }
 }
@@ -297,9 +300,12 @@ private fun WorkspaceList(
                 modifier = Modifier.size(32.dp),
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Text("正在获取工作区…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.loading_workspaces), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        error != null -> ErrorContent(message = "加载工作区失败: $error", onRetry = { retryKey++ })
+        error != null -> {
+            val err = error
+            ErrorContent(message = stringResource(R.string.load_workspaces_failed, err ?: ""), onRetry = { retryKey++ })
+        }
         workspaces.isEmpty() -> Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -313,7 +319,7 @@ private fun WorkspaceList(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                "桌面端没有打开的工作区",
+                stringResource(R.string.no_workspaces),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -325,7 +331,7 @@ private fun WorkspaceList(
         ) {
             item {
                 Text(
-                    "工作区",
+                    stringResource(R.string.workspace_title),
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = Modifier.padding(bottom = 4.dp),
                 )
@@ -368,7 +374,7 @@ private fun WorkspaceCard(
             Column(modifier = Modifier.weight(1f)) {
                 val title = (workspace["label"] as? String)
                     ?: (workspace["workspacePath"] as? String)?.split("[\\\\/]".toRegex())?.lastOrNull { it.isNotEmpty() }
-                    ?: workspace["workspaceIdentity"] as? String ?: "未知工作区"
+                    ?: workspace["workspaceIdentity"] as? String ?: stringResource(R.string.unknown_workspace)
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium,

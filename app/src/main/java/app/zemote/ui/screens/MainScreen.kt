@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -24,6 +26,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import app.zemote.state.Account
 import app.zemote.state.AccountStore
@@ -35,9 +38,10 @@ private data class MainTab(
     val unselectedIcon: ImageVector,
 )
 
-private val MainTabs = listOf(
-    MainTab("设备", Icons.Rounded.Devices, Icons.Outlined.Devices),
-    MainTab("设置", Icons.Rounded.Settings, Icons.Outlined.Settings),
+@Composable
+private fun mainTabs(): List<MainTab> = listOf(
+    MainTab(stringResource(R.string.nav_devices), Icons.Rounded.Devices, Icons.Outlined.Devices),
+    MainTab(stringResource(R.string.nav_settings), Icons.Rounded.Settings, Icons.Outlined.Settings),
 )
 
 /**
@@ -57,7 +61,7 @@ fun MainScreen(
     Scaffold(
         bottomBar = {
             NavigationBar {
-                MainTabs.forEachIndexed { index, item ->
+                mainTabs().forEachIndexed { index, item ->
                     NavigationBarItem(
                         selected = tab == index,
                         onClick = { tab = index },

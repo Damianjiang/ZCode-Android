@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -31,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -56,9 +59,9 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(12.dp))
             Column {
-                Text("应用崩溃了", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.crash_title), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
                 Text(
-                    "崩溃日志已保存在下方，可复制后反馈给开发者",
+                    stringResource(R.string.crash_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -85,18 +88,20 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
 
         Spacer(modifier = Modifier.size(18.dp))
 
+        val logTitle = stringResource(R.string.crash_log_title)
+        val copiedMsg = stringResource(R.string.crash_copied)
         Button(
             onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Zemote 崩溃日志", log))
-                Toast.makeText(context, "崩溃日志已复制，可粘贴反馈给开发者", Toast.LENGTH_SHORT).show()
+                clipboard.setPrimaryClip(ClipData.newPlainText(logTitle, log))
+                Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
             },
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("复制崩溃日志（反馈给开发者）")
+            Text(stringResource(R.string.crash_copy))
         }
 
         Spacer(modifier = Modifier.size(10.dp))
@@ -108,7 +113,7 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
         ) {
             Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("清除日志并重启应用")
+            Text(stringResource(R.string.crash_restart))
         }
     }
 }

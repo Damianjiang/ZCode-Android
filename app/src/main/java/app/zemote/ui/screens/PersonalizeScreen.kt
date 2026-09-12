@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -64,9 +67,9 @@ fun PersonalizeScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
             }
-            Text("个性化", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.personalize), style = MaterialTheme.typography.titleLarge)
         }
 
         Column(
@@ -76,13 +79,13 @@ fun PersonalizeScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SectionLabel("主题颜色")
+            SectionLabel(stringResource(R.string.theme_color))
             SettingsCard {
                 Column(modifier = Modifier.padding(18.dp)) {
                     SettingRow(
                         icon = Icons.Rounded.Palette,
-                        title = "品牌色",
-                        subtitle = "挑选一套属于你的配色",
+                        title = stringResource(R.string.brand_color),
+                        subtitle = stringResource(R.string.pick_palette),
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
@@ -104,8 +107,8 @@ fun PersonalizeScreen(
             SettingsCard {
                 SettingRow(
                     icon = Icons.Rounded.Contrast,
-                    title = "动态取色",
-                    subtitle = "Android 12+ 根据壁纸自动配色（开启后覆盖上方品牌色）",
+                    title = stringResource(R.string.dynamic_color),
+                    subtitle = stringResource(R.string.dynamic_color_sub),
                     trailing = {
                         Switch(
                             checked = themeState.dynamicColor,
@@ -116,16 +119,16 @@ fun PersonalizeScreen(
                 )
             }
 
-            SectionLabel("模式")
+            SectionLabel(stringResource(R.string.mode))
             SettingsCard {
                 Column(modifier = Modifier.padding(18.dp)) {
                     SettingRow(
                         icon = Icons.Rounded.Palette,
-                        title = "亮暗模式",
+                        title = stringResource(R.string.light_dark),
                         subtitle = when (themeState.mode) {
-                            ThemeManager.ThemeMode.LIGHT -> "始终使用浅色主题"
-                            ThemeManager.ThemeMode.DARK -> "始终使用深色主题"
-                            ThemeManager.ThemeMode.FOLLOW_SYSTEM -> "跟随系统自动切换"
+                            ThemeManager.ThemeMode.LIGHT -> stringResource(R.string.always_light)
+                            ThemeManager.ThemeMode.DARK -> stringResource(R.string.always_dark)
+                            ThemeManager.ThemeMode.FOLLOW_SYSTEM -> stringResource(R.string.follow_system_auto)
                         },
                     )
                     Spacer(modifier = Modifier.height(14.dp))
@@ -134,26 +137,26 @@ fun PersonalizeScreen(
                             selected = themeState.mode == ThemeManager.ThemeMode.LIGHT,
                             onClick = { themeManager.setMode(ThemeManager.ThemeMode.LIGHT) },
                             shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                            label = { Text("浅色") },
+                            label = { Text(stringResource(R.string.light)) },
                         )
                         SegmentedButton(
                             selected = themeState.mode == ThemeManager.ThemeMode.DARK,
                             onClick = { themeManager.setMode(ThemeManager.ThemeMode.DARK) },
                             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                            label = { Text("深色") },
+                            label = { Text(stringResource(R.string.dark)) },
                         )
                         SegmentedButton(
                             selected = themeState.mode == ThemeManager.ThemeMode.FOLLOW_SYSTEM,
                             onClick = { themeManager.setMode(ThemeManager.ThemeMode.FOLLOW_SYSTEM) },
                             shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                            label = { Text("跟随系统") },
+                            label = { Text(stringResource(R.string.mode_follow_system)) },
                         )
                     }
                 }
             }
 
             Text(
-                "个性化设置会自动保存到本机",
+                stringResource(R.string.auto_saved),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 6.dp, bottom = 28.dp),
@@ -186,7 +189,7 @@ private fun ColorSwatch(
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
                     Icon(
                         Icons.Rounded.Check,
-                        contentDescription = "已选择",
+                        contentDescription = stringResource(R.string.selected),
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier
                             .padding(4.dp)

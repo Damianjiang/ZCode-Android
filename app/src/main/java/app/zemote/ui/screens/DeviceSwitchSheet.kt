@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,14 +64,14 @@ fun DeviceSwitchSheet(
                 .padding(horizontal = 12.dp),
         ) {
             Text(
-                "切换设备",
+                stringResource(R.string.switch_device),
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             )
 
             if (accounts.isEmpty()) {
                 Text(
-                    "暂无设备",
+                    stringResource(R.string.no_devices),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
@@ -124,7 +127,7 @@ fun DeviceSwitchSheet(
                             when {
                                 isActive -> Icon(
                                     Icons.Rounded.Check,
-                                    contentDescription = "当前设备",
+                                    contentDescription = stringResource(R.string.current_device),
                                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.size(20.dp),
                                 )
@@ -134,7 +137,7 @@ fun DeviceSwitchSheet(
                                 ) {
                                     Icon(
                                         Icons.Rounded.LinkOff,
-                                        contentDescription = "断开",
+                                        contentDescription = stringResource(R.string.disconnect),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(17.dp),
                                     )
@@ -180,7 +183,7 @@ fun DeviceSwitchSheet(
                         }
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("添加新设备", style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.add_new_device), style = MaterialTheme.typography.titleMedium)
                 }
             }
 

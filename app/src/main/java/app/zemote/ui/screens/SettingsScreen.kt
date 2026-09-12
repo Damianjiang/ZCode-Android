@@ -1,5 +1,15 @@
 package app.zemote.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.platform.LocalContext
+import app.zemote.R
+import app.zemote.state.LanguagePrefs
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.zemote.BuildConfig
@@ -51,7 +62,7 @@ fun SettingsScreen(
     ) {
         // Tab 页头：无返回键
         Text(
-            "设置",
+            stringResource(R.string.settings_title),
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
         )
@@ -63,38 +74,106 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SectionLabel("外观")
+            val ctx = LocalContext.current
+            val currentLang = LanguagePrefs.get(ctx)
+            val langName = when (currentLang) {
+                LanguagePrefs.ZH -> stringResource(R.string.lang_chinese)
+                LanguagePrefs.EN -> stringResource(R.string.lang_english)
+                else -> stringResource(R.string.lang_follow_system)
+            }
+            var showLangDialog by remember { mutableStateOf(false) }
+
+            SectionLabel(stringResource(R.string.section_appearance))
             SettingsCard {
                 SettingRow(
                     icon = Icons.Rounded.Palette,
-                    title = "个性化",
-                    subtitle = "主题颜色、亮暗模式、动态取色",
+                    title = stringResource(R.string.personalize),
+                    subtitle = stringResource(R.string.personalize_sub),
                     onClick = onOpenPersonalize,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+                SettingRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.language_label),
+                    subtitle = langName,
+                    onClick = { showLangDialog = true },
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                 )
             }
 
-            SectionLabel("关于")
+            SectionLabel(stringResource(R.string.section_about))
             SettingsCard {
                 Column {
                     SettingRow(
                         icon = Icons.Rounded.Info,
-                        title = "版本",
+                        title = stringResource(R.string.version_label),
                         subtitle = BuildConfig.VERSION_NAME,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                     )
                     SettingRow(
                         icon = Icons.Rounded.HistoryEdu,
-                        title = "更新日志",
-                        subtitle = "查看各版本的更新内容",
+                        title = stringResource(R.string.changelog),
+                        subtitle = stringResource(R.string.changelog_sub),
                         onClick = onOpenChangelog,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                     )
                 }
             }
 
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.Person,
+                    title = stringResource(R.string.author_line),
+                    subtitle = stringResource(R.string.issues_line),
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Damianjiang/ZCode-Android"))
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                )
+            }
+
+            if (showLangDialog) {
+                val activity = ctx as? ComponentActivity
+                AlertDialog(
+                    onDismissRequest = { showLangDialog = false },
+                    title = { Text(stringResource(R.string.language_label)) },
+                    text = {
+                        Column {
+                            LanguagePrefs.options.forEach { opt ->
+                                val name = when (opt) {
+                                    LanguagePrefs.ZH -> stringResource(R.string.lang_chinese)
+                                    LanguagePrefs.EN -> stringResource(R.string.lang_english)
+                                    else -> stringResource(R.string.lang_follow_system)
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            LanguagePrefs.set(ctx, opt)
+                                            showLangDialog = false
+                                            activity?.recreate()
+                                        }
+                                        .padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(selected = currentLang == opt, onClick = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(name, style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {},
+                )
+            }
+
             Text(
-                "Zemote · ZCode 远程控制客户端（协议复刻，独立实现）\n仅用于连接你自己的设备，请遵守服务条款与当地法律。",
+                stringResource(R.string.about_footer),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 6.dp, bottom = 28.dp),

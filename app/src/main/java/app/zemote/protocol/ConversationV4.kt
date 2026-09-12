@@ -263,37 +263,58 @@ class ConversationV4Session private constructor(
     private var firstRowId: Long? = null
     private var totalCount = 0L
 
+    // openConversation 进行中标志：恢复重建必须避让，否则会拆掉刚建立的订阅，
+    // 导致历史/模型等数据永远拉不到
+    @Volatile private var opening = false
+    private var rebuildPending = false
+    private var rebuilding = false
+
     init {
-        // bridge 重连/重开后：旧 channel 栈与订阅全部作废，重置握手并整体重建，
-        // 对话与 sessions-index 订阅随 bridge 恢复自动回到工作状态
+        // bridge 重连/重开后：旧 channel 栈与订阅全部作废，重置握手并整体重建。
+        // 若此刻 openConversation 正在进行，则挂起重待办，等它完成后再重建。
         sessionScope.launch {
             bridge.recovered.collect { count ->
                 if (count <= 0 || bridge.isDisposed) return@collect
-                log("[v4] bridge recovered, rebuilding subscriptions")
-                val hadSessionsIndex = siSubId != null
-                val activeId = _activeSessionId.value
-                handshakeDone = false
-                connectionId = null
-                convWatchdog?.cancel()
-                convCancel?.invoke(); convCancel = null
-                convSubId = null
-                siCancel?.invoke(); siCancel = null
-                siSubId = null
-                convSeq = 0
-                siSeq = 0
-                snapshotSeen = false
-                _pendingPatch = null
-                synchronized(stagedFrames) { stagedFrames.clear() }
-                synchronized(siStaged) { siStaged.clear() }
-                runCatching { ensureHandshake() }
-                    .onFailure { log("[v4] handshake after recovery failed: $it"); return@collect }
-                if (activeId != null) {
-                    runCatching { subscribeConversation(activeId) }
-                        .onFailure { log("[v4] resubscribe failed: $it") }
-                    runCatching { loadRows(activeId, limit = 200) }
+                if (opening) {
+                    rebuildPending = true
+                    log("[v4] bridge recovered during open, rebuild deferred")
+                    return@collect
                 }
-                if (hadSessionsIndex) runCatching { openSessionsIndex() }
+                rebuildSubscriptions()
             }
+        }
+    }
+
+    private suspend fun rebuildSubscriptions() {
+        if (rebuilding) return
+        rebuilding = true
+        try {
+            log("[v4] bridge recovered, rebuilding subscriptions")
+            val hadSessionsIndex = siSubId != null
+            val activeId = _activeSessionId.value
+            handshakeDone = false
+            connectionId = null
+            convWatchdog?.cancel()
+            convCancel?.invoke(); convCancel = null
+            convSubId = null
+            siCancel?.invoke(); siCancel = null
+            siSubId = null
+            convSeq = 0
+            siSeq = 0
+            snapshotSeen = false
+            _pendingPatch = null
+            synchronized(stagedFrames) { stagedFrames.clear() }
+            synchronized(siStaged) { siStaged.clear() }
+            runCatching { ensureHandshake() }
+                .onFailure { log("[v4] handshake after recovery failed: $it"); return }
+            if (activeId != null) {
+                runCatching { subscribeConversation(activeId) }
+                    .onFailure { log("[v4] resubscribe failed: $it") }
+                runCatching { loadRows(activeId, limit = 200) }
+            }
+            if (hadSessionsIndex) runCatching { openSessionsIndex() }
+        } finally {
+            rebuilding = false
         }
     }
 
@@ -337,32 +358,52 @@ class ConversationV4Session private constructor(
      */
     suspend fun openConversation(sessionId: String?) = withContext(Dispatchers.IO) {
         if (_activeSessionId.value == sessionId && _rows.value.isNotEmpty()) return@withContext
-        unsubscribeConversation()
-        _activeSessionId.value = sessionId
-        _rows.value = emptyList()
-        firstRowId = null
-        totalCount = 0
-        convSeq = 0
-        convLogEpoch = null
-        snapshotSeen = false
-        _pendingPatch = null
-        ackedRevisions.clear()
-        synchronized(stagedFrames) { stagedFrames.clear() }
-        _loading.value = true
-        runCatching { ensureHandshake() }
-            .onFailure { log("[v4] handshake failed: $it") }
-        // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开
-        sessionScope.launch { runCatching { prepareWorkspace() } }
-        if (sessionId != null) {
-            runCatching { subscribeConversation(sessionId) }
-                .onFailure { log("[v4] subscribe failed: $it") }
+        opening = true
+        try {
+            openConversationInternal(sessionId)
+        } finally {
+            opening = false
+        }
+        // 打开期间若有 bridge 恢复事件被搁置，现在补做重建
+        if (rebuildPending && !bridge.isDisposed) {
+            rebuildPending = false
+            rebuildSubscriptions()
+        }
+    }
+
+    private suspend fun openConversationInternal(sessionId: String?) {
+        // 总超时兜底：任何一步卡住都保证 loading 收敛，界面不会永远转圈
+        kotlinx.coroutines.withTimeout(100_000) {
             try {
-                loadRows(sessionId, limit = 200)
-            } catch (e: Exception) {
-                log("[v4] loadRows failed: ${e.message}")
+                unsubscribeConversation()
+                _activeSessionId.value = sessionId
+                _rows.value = emptyList()
+                firstRowId = null
+                totalCount = 0
+                convSeq = 0
+                convLogEpoch = null
+                snapshotSeen = false
+                _pendingPatch = null
+                ackedRevisions.clear()
+                synchronized(stagedFrames) { stagedFrames.clear() }
+                _loading.value = true
+                runCatching { ensureHandshake() }
+                    .onFailure { log("[v4] handshake failed: $it") }
+                // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开
+                sessionScope.launch { runCatching { prepareWorkspace() } }
+                if (sessionId != null) {
+                    runCatching { subscribeConversation(sessionId) }
+                        .onFailure { log("[v4] subscribe failed: $it") }
+                    try {
+                        loadRows(sessionId, limit = 200)
+                    } catch (e: Exception) {
+                        log("[v4] loadRows failed: ${e.message}")
+                    }
+                }
+            } finally {
+                _loading.value = false
             }
         }
-        _loading.value = false
     }
 
     private suspend fun subscribeConversation(sessionId: String) {

@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import android.graphics.BitmapFactory
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -87,6 +89,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -125,10 +128,14 @@ fun TasksScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
 
+    val unnamedSessionText = stringResource(R.string.unnamed_session)
+    val notConnectedText = stringResource(R.string.device_not_connected)
+    val fetchFailedText = stringResource(R.string.fetch_tasks_failed)
+
     LaunchedEffect(accountId, workspaceKey) {
         val client = accountId?.let { session.clientOf(it) }
         if (client == null) {
-            error = "设备未连接"
+            error = notConnectedText
             loading = false
             return@LaunchedEffect
         }
@@ -140,7 +147,7 @@ fun TasksScreen(
                 loading = false
             }
             .onFailure {
-                error = it.message ?: "无法获取任务列表"
+                error = it.message ?: fetchFailedText
                 loading = false
             }
         // 订阅工作区 sessions-index：会话列表实时更新（新增/标题/运行状态），
@@ -155,7 +162,7 @@ fun TasksScreen(
                     val old = byId[e.sessionId]
                     byId[e.sessionId] = app.zemote.protocol.TaskEntry(
                         taskId = e.sessionId,
-                        title = e.title.ifBlank { old?.title ?: "未命名会话" },
+                        title = e.title.ifBlank { old?.title ?: unnamedSessionText },
                         status = if (e.running) "running" else e.phase.ifBlank { old?.status },
                         workspacePath = old?.workspacePath,
                         workspaceLabel = old?.workspaceLabel
@@ -179,12 +186,12 @@ fun TasksScreen(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding(),
     ) {
-        ScreenHeader(title = "任务会话", onBack = onBack)
+        ScreenHeader(title = stringResource(R.string.sessions_title), onBack = onBack)
 
         when {
             error != null -> CenterHint(
                 icon = { Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(44.dp)) },
-                title = "无法获取会话",
+                title = stringResource(R.string.fetch_sessions_failed),
                 body = error,
             )
             loading -> Column(
@@ -194,7 +201,7 @@ fun TasksScreen(
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(14.dp))
-                Text("正在获取会话…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.fetching_sessions), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -202,7 +209,7 @@ fun TasksScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (running.isNotEmpty()) {
-                    item { SectionText("运行中") }
+                    item { SectionText(stringResource(R.string.running_section)) }
                     items(running, key = { it.taskId }) { entry ->
                         SessionRow(
                             title = entry.title,
@@ -213,7 +220,7 @@ fun TasksScreen(
                     }
                 }
                 if (history.isNotEmpty()) {
-                    item { SectionText("历史会话") }
+                    item { SectionText(stringResource(R.string.history_section)) }
                     items(history, key = { "h-" + it.taskId }) { entry ->
                         SessionRow(
                             title = entry.title,
@@ -227,8 +234,8 @@ fun TasksScreen(
                     item {
                         CenterHint(
                             icon = { Icon(Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(44.dp)) },
-                            title = "暂无会话记录",
-                            body = "桌面端的历史会话会显示在这里；也可以直接发起新对话",
+                            title = stringResource(R.string.no_sessions),
+                            body = stringResource(R.string.no_sessions_hint),
                             modifier = Modifier.padding(top = 80.dp),
                         )
                     }
@@ -248,7 +255,7 @@ fun TasksScreen(
                             Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                "发起新对话",
+                                stringResource(R.string.start_new_chat),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                             )
@@ -292,7 +299,7 @@ fun ChatScreen(
                             ?: return@mapNotNull null
                         val name = queryDisplayName(context, uri)
                             ?: uri.lastPathSegment?.substringAfterLast('/')
-                            ?: "附件"
+                            ?: context.getString(R.string.attach)
                         PendingFile(name, context.contentResolver.getType(uri) ?: guessMime(name), bytes)
                     }.getOrNull()
                 }
@@ -301,9 +308,12 @@ fun ChatScreen(
         }
     }
 
+    val deviceNotConnectedText = stringResource(R.string.device_not_connected)
+    val deviceNotConnectedRetryText = stringResource(R.string.device_not_connected_retry)
+
     LaunchedEffect(accountId, workspaceKey, sessionId) {
         if (accountId == null) {
-            error = "设备未连接"
+            error = deviceNotConnectedText
             return@LaunchedEffect
         }
         // 快速进入时设备可能仍在重连（connections 里还没有 client），有限次重试而不是永久空白
@@ -315,7 +325,7 @@ fun ChatScreen(
             delay(1500)
         }
         if (opened != null) repo = opened
-        else error = "设备未连接，无法打开会话，请返回重试"
+        else error = deviceNotConnectedRetryText
     }
 
     // 会话标题数据源：sessions-index（幂等，重复调用自动跳过）
@@ -393,9 +403,9 @@ fun ChatScreen(
             ?.title?.trim()?.ifBlank { null }
         ScreenHeader(
             title = when {
-                activeId == null -> "新对话"
+                activeId == null -> stringResource(R.string.new_chat)
                 sessionTitle != null -> sessionTitle
-                else -> "任务会话"
+                else -> stringResource(R.string.sessions_title)
             },
             subtitle = activeId?.take(12),
             onBack = onBack,
@@ -405,7 +415,7 @@ fun ChatScreen(
         if (errorMessage != null) {
             CenterHint(
                 icon = { Icon(Icons.Rounded.SmartToy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(44.dp)) },
-                title = "无法打开对话",
+                title = stringResource(R.string.cannot_open_chat),
                 body = errorMessage,
             )
         } else if (repo == null) {
@@ -423,7 +433,7 @@ fun ChatScreen(
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        "正在打开会话…",
+                        stringResource(R.string.opening_session),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -455,7 +465,7 @@ fun ChatScreen(
                                 )
                                 Spacer(modifier = Modifier.height(14.dp))
                                 Text(
-                                    "正在加载对话…",
+                                    stringResource(R.string.loading_chat),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -500,7 +510,7 @@ fun ChatScreen(
                                 ThinkingDot()
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    "正在处理…",
+                                    stringResource(R.string.processing),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -520,7 +530,7 @@ fun ChatScreen(
                 ) {
                     Icon(
                         Icons.Rounded.ArrowDownward,
-                        contentDescription = if (autoFollow) "自动跟随已开启" else "自动跟随已关闭",
+                        contentDescription = if (autoFollow) stringResource(R.string.auto_follow_on) else stringResource(R.string.auto_follow_off),
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -576,15 +586,15 @@ fun ChatScreen(
                                 // createSession → attachmentPut → sendText(attachments)
                                 if (target == null) {
                                     target = repo0.createSession()
-                                        ?: throw IllegalStateException("创建会话失败")
+                                        ?: throw IllegalStateException(context.getString(R.string.create_session_failed))
                                 }
                                 val descriptors = mutableListOf<Map<String, Any?>>()
                                 files.forEachIndexed { i, f ->
-                                    uploadStatus = "正在上传附件 ${i + 1}/${files.size}"
+                                    uploadStatus = context.getString(R.string.uploading_files, i + 1, files.size)
                                     val up = repo0.attachmentPut(target, f.name, f.mime, f.bytes) { p ->
-                                        uploadStatus = "正在上传附件 ${i + 1}/${files.size} · ${(p * 100).toInt()}%"
+                                        uploadStatus = context.getString(R.string.uploading_progress, i + 1, files.size, (p * 100).toInt())
                                     }
-                                    if (up.ref.isNullOrBlank()) throw IllegalStateException("附件上传失败：${f.name}")
+                                    if (up.ref.isNullOrBlank()) throw IllegalStateException(context.getString(R.string.attach_failed, f.name))
                                     descriptors.add(mapOf(
                                         "ref" to up.ref,
                                         "fileName" to up.fileName,
@@ -664,7 +674,7 @@ private fun ImagePlaceholder(row: ConvRow) {
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                row.text.ifBlank { "图片消息" },
+                row.text.ifBlank { stringResource(R.string.image_message) },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -696,11 +706,11 @@ private fun UserBubble(row: ConvRow, loadAttachment: suspend (String) -> app.zem
             if (att["mime"]?.startsWith("image/") == true) {
                 ImageAttachmentView(
                     ref = att["ref"].orEmpty(),
-                    fileName = att["fileName"] ?: "图片",
+                    fileName = att["fileName"] ?: stringResource(R.string.image),
                     loadAttachment = loadAttachment,
                 )
             } else {
-                AttachmentChip(fileName = att["fileName"] ?: "附件")
+                AttachmentChip(fileName = att["fileName"] ?: stringResource(R.string.attach))
             }
         }
     }
@@ -807,7 +817,7 @@ private fun ImageAttachmentView(
                 CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "图片加载中…",
+                    stringResource(R.string.image_loading),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -857,13 +867,13 @@ private fun QueueBar(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    "排队消息 ${order.size}",
+                    stringResource(R.string.queued_count, order.size),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
-                    if (autoDrain) "自动发送：开" else "自动发送：关",
+                    if (autoDrain) stringResource(R.string.auto_send_on) else stringResource(R.string.auto_send_off),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.clickable { onToggleAutoDrain(!autoDrain) },
@@ -921,7 +931,7 @@ private fun QueueBar(
                 ) {
                     Icon(
                         Icons.Rounded.DragIndicator,
-                        contentDescription = "拖动排序",
+                        contentDescription = stringResource(R.string.drag_reorder),
                         tint = if (dragId == item.queueItemId) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -931,7 +941,7 @@ private fun QueueBar(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        "${index + 1}. ${item.text}",
+                        stringResource(R.string.queue_item_index, index + 1, item.text),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -941,7 +951,7 @@ private fun QueueBar(
                     IconButton(onClick = { onSendNow(item.queueItemId) }, modifier = Modifier.size(30.dp)) {
                         Icon(
                             Icons.Filled.PlayArrow,
-                            contentDescription = "立即发送",
+                            contentDescription = stringResource(R.string.send_now),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp),
                         )
@@ -949,7 +959,7 @@ private fun QueueBar(
                     IconButton(onClick = { editTarget = item }, modifier = Modifier.size(30.dp)) {
                         Icon(
                             Icons.Rounded.Edit,
-                            contentDescription = "编辑",
+                            contentDescription = stringResource(R.string.edit),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp),
                         )
@@ -957,7 +967,7 @@ private fun QueueBar(
                     IconButton(onClick = { deleteTarget = item }, modifier = Modifier.size(30.dp)) {
                         Icon(
                             Icons.Rounded.Delete,
-                            contentDescription = "删除",
+                            contentDescription = stringResource(R.string.delete),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp),
                         )
@@ -971,7 +981,7 @@ private fun QueueBar(
         var editText by remember(target.queueItemId) { mutableStateOf(target.text) }
         AlertDialog(
             onDismissRequest = { editTarget = null },
-            title = { Text("编辑排队消息") },
+            title = { Text(stringResource(R.string.queue_edit_title)) },
             text = {
                 OutlinedTextField(
                     value = editText,
@@ -984,10 +994,10 @@ private fun QueueBar(
                     val t = editText.trim()
                     editTarget = null
                     if (t.isNotEmpty()) onEdit(target.queueItemId, t)
-                }) { Text("保存") }
+                }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
-                TextButton(onClick = { editTarget = null }) { Text("取消") }
+                TextButton(onClick = { editTarget = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -995,16 +1005,16 @@ private fun QueueBar(
     deleteTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("删除排队消息？") },
+            title = { Text(stringResource(R.string.queue_delete_title)) },
             text = { Text(target.text, maxLines = 3, overflow = TextOverflow.Ellipsis) },
             confirmButton = {
                 TextButton(onClick = {
                     deleteTarget = null
                     onDelete(target.queueItemId)
-                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+                TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -1057,7 +1067,7 @@ private fun PendingFilesBar(
                     IconButton(onClick = { onRemove(f) }, modifier = Modifier.size(24.dp)) {
                         Icon(
                             Icons.Rounded.Close,
-                            contentDescription = "移除",
+                            contentDescription = stringResource(R.string.remove),
                             modifier = Modifier.size(14.dp),
                         )
                     }
@@ -1121,7 +1131,7 @@ private fun ThinkingBlock(row: ConvRow) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    if (streaming) "思考中…" else "思考",
+                    if (streaming) stringResource(R.string.thinking_ellipsis) else stringResource(R.string.thinking_label),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1157,6 +1167,7 @@ private fun ThinkingBlock(row: ConvRow) {
 @Composable
 private fun ToolGroupCard(rows: List<ConvRow>) {
     var expanded by remember(rows.firstOrNull()?.rowId) { mutableStateOf(false) }
+    val ctx = LocalContext.current
     val anyRunning = rows.any {
         it.toolStatus == null || it.toolStatus == "running" || it.toolStatus == "pending"
     }
@@ -1179,14 +1190,14 @@ private fun ToolGroupCard(rows: List<ConvRow>) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "执行过程",
+                    stringResource(R.string.exec_activity),
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 if (rows.size > 1) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        "${rows.size} 步",
+                        stringResource(R.string.exec_steps, rows.size),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1195,12 +1206,12 @@ private fun ToolGroupCard(rows: List<ConvRow>) {
                 if (anyRunning) {
                     ThinkingDot()
                 } else if (anyFailed) {
-                    Text("有失败", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.some_failed), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = if (expanded) "收起" else "展开",
+                    contentDescription = if (expanded) stringResource(R.string.collapse) else stringResource(R.string.expand),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp),
                 )
@@ -1215,7 +1226,7 @@ private fun ToolGroupCard(rows: List<ConvRow>) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        toolSentence(row),
+                        toolSentence(ctx, row),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -1227,7 +1238,7 @@ private fun ToolGroupCard(rows: List<ConvRow>) {
                         ThinkingDot()
                     } else if (row.toolStatus == "error") {
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("失败", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.failed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     }
                     if (row.additions != null && row.additions > 0) {
                         Spacer(modifier = Modifier.width(6.dp))
@@ -1256,22 +1267,30 @@ private fun ToolGroupCard(rows: List<ConvRow>) {
 }
 
 /** 把一步工具调用翻译成一句人话：执行了命令 xxx / 修改了 MainActivity.kt / 读取了 … */
-private fun toolSentence(row: ConvRow): String {
+private fun toolSentence(ctx: android.content.Context, row: ConvRow): String {
     val name = row.toolName?.lowercase()
     val inputSrc = row.inputText.ifBlank { row.summaryText }
     val target = summarizeToolInput(name, inputSrc).ifBlank { row.text }
-    val what = when (name) {
-        "terminal", "bash", "run_command" -> "执行了命令"
-        "edit" -> "修改了"
-        "write" -> "写入了"
-        "multiedit", "notebookedit" -> "批量修改了"
-        "read" -> "读取了"
-        "search", "grep", "glob", "websearch", "web_fetch" -> "搜索了"
-        "task", "subagent" -> "子任务"
-        null -> "调用了工具"
-        else -> "调用了 ${row.toolName}"
+    return when (name) {
+        "terminal", "bash", "run_command" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_run) else ctx.getString(R.string.tool_run_arg, target)
+        "edit" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_edit) else ctx.getString(R.string.tool_edit_arg, target)
+        "write" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_write) else ctx.getString(R.string.tool_write_arg, target)
+        "multiedit", "notebookedit" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_multi_edit) else ctx.getString(R.string.tool_multi_edit_arg, target)
+        "read" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_read) else ctx.getString(R.string.tool_read_arg, target)
+        "search", "grep", "glob", "websearch", "web_fetch" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_search) else ctx.getString(R.string.tool_search_arg, target)
+        "task", "subagent" ->
+            if (target.isBlank()) ctx.getString(R.string.tool_subtask) else ctx.getString(R.string.tool_subtask_arg, target)
+        null -> ctx.getString(R.string.tool_generic)
+        else ->
+            if (target.isBlank()) ctx.getString(R.string.tool_named, row.toolName ?: "")
+            else ctx.getString(R.string.tool_named_arg, row.toolName ?: "", target)
     }
-    return if (target.isBlank()) what else "$what $target"
 }
 
 /** 时间线显示项：普通行单条展示，连续的工具行聚合为一组 */
@@ -1400,8 +1419,8 @@ private fun ComposerBar(
                     onValueChange = onTextChange,
                     placeholder = {
                         Text(
-                            if (working) "AI 正在回复，内容将排队发送"
-                            else "继续输入，@ 可引用上下文",
+                            if (working) stringResource(R.string.composer_hint_queued)
+                            else stringResource(R.string.composer_hint),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     },
@@ -1480,7 +1499,7 @@ private fun AttachmentButton(onClick: () -> Unit) {
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         ),
     ) {
-        Icon(Icons.Rounded.Add, contentDescription = "附件", modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.attach), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1491,6 +1510,7 @@ private fun ThoughtLevelButton(
     onSelect: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
     val current = config?.thought
     val levels = config?.thoughtLevels ?: emptyList()
 
@@ -1506,7 +1526,7 @@ private fun ThoughtLevelButton(
         ) {
             Icon(
                 Icons.Rounded.Psychology,
-                contentDescription = "思考等级",
+                contentDescription = stringResource(R.string.thought_level),
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(17.dp),
             )
@@ -1516,7 +1536,7 @@ private fun ThoughtLevelButton(
                 DropdownMenuItem(
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(thoughtLabel(level), style = MaterialTheme.typography.bodyMedium)
+                            Text(thoughtLabel(ctx, level), style = MaterialTheme.typography.bodyMedium)
                             if (level == current) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -1541,7 +1561,7 @@ private fun ModelButton(
     val currentProvider = config?.provider
     val currentModel = config?.model
 
-    val label = if (currentModel != null) modelLabel(currentProvider ?: "", currentModel) else "模型"
+    val label = if (currentModel != null) modelLabel(currentProvider ?: "", currentModel) else stringResource(R.string.model_label)
 
     Box {
         FilledTonalIconButton(
@@ -1553,7 +1573,7 @@ private fun ModelButton(
         ) {
             Icon(
                 Icons.Rounded.Memory,
-                contentDescription = "模型",
+                contentDescription = stringResource(R.string.model_label),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(17.dp),
             )
@@ -1561,7 +1581,7 @@ private fun ModelButton(
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (modelOptions.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text("暂无可用模型", style = MaterialTheme.typography.bodyMedium) },
+                    text = { Text(stringResource(R.string.model_empty), style = MaterialTheme.typography.bodyMedium) },
                     onClick = { open = false },
                 )
             } else {
@@ -1609,11 +1629,12 @@ private fun UsageButton(usage: app.zemote.protocol.ConvUsage?) {
             // M3 饼图图标，颜色随用量分档
             Icon(
                 Icons.Rounded.PieChart,
-                contentDescription = "上下文用量",
+                contentDescription = stringResource(R.string.context_usage),
                 tint = color,
                 modifier = Modifier.size(20.dp),
             )
         }
+        val ctx2 = LocalContext.current
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
                 text = {
@@ -1626,14 +1647,14 @@ private fun UsageButton(usage: app.zemote.protocol.ConvUsage?) {
             )
             if (usage.hitRate != null) {
                 DropdownMenuItem(
-                    text = { Text("缓存命中率: ${(usage.hitRate * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium) },
+                    text = { Text(stringResource(R.string.usage_cache_hit, (usage.hitRate * 100).toInt()), style = MaterialTheme.typography.bodyMedium) },
                     onClick = { open = false },
                 )
             }
             for ((source, chars) in usage.breakdown) {
                 DropdownMenuItem(
                     text = {
-                        Text("${sourceLabel(source)}: ${(chars / 1000).toInt()}k 字符", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.usage_chars, sourceLabel(ctx2, source), "${(chars / 1000).toInt()}k"), style = MaterialTheme.typography.bodySmall)
                     },
                     onClick = { open = false },
                 )
@@ -1654,7 +1675,7 @@ private fun StopButton(onClick: () -> Unit, workId: String? = null) {
         ),
         modifier = Modifier.size(40.dp),
     ) {
-        Icon(Icons.Rounded.Stop, contentDescription = "停止", modifier = Modifier.size(18.dp))
+        Icon(Icons.Rounded.Stop, contentDescription = stringResource(R.string.stop), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -1669,7 +1690,7 @@ private fun QueueButton(onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, modifier = Modifier.size(17.dp))
             Spacer(modifier = Modifier.width(4.dp))
-            Text("排队", style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.usage_queue), style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -1689,7 +1710,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     ) {
         Icon(
             Icons.AutoMirrored.Rounded.Send,
-            contentDescription = "发送",
+            contentDescription = stringResource(R.string.send),
             modifier = Modifier.size(18.dp),
         )
     }
@@ -1697,27 +1718,26 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
 
 // ────────────────────────── 辅助函数 ──────────────────────────
 
-/** 思考等级中文标签（官方 thought 取值） */
-private fun thoughtLabel(level: String): String = when (level.lowercase()) {
-    "off", "none", "disabled" -> "关闭"
-    "nothink", "no-think", "no_think" -> "不思考"
-    "on", "enabled" -> "开启"
-    "low", "light", "minimal", "shallow" -> "低"
-    "medium", "balanced", "default" -> "中"
-    "high" -> "高"
-    "xhigh", "extra-high", "extra_high", "very-high", "very_high" -> "超高"
-    "max", "maximum" -> "最高"
+private fun thoughtLabel(ctx: android.content.Context, level: String): String = when (level.lowercase()) {
+    "off", "none", "disabled" -> ctx.getString(R.string.thought_off)
+    "nothink", "no-think", "no_think" -> ctx.getString(R.string.thought_no)
+    "on", "enabled" -> ctx.getString(R.string.thought_on)
+    "low", "light", "minimal", "shallow" -> ctx.getString(R.string.thought_low)
+    "medium", "balanced", "default" -> ctx.getString(R.string.thought_medium)
+    "high" -> ctx.getString(R.string.thought_high)
+    "xhigh", "extra-high", "extra_high", "very-high", "very_high" -> ctx.getString(R.string.thought_vhigh)
+    "max", "maximum" -> ctx.getString(R.string.thought_max)
     else -> level
 }
 
 /** 来源名称中文映射 */
-private fun sourceLabel(source: String): String = when (source) {
-    "messages" -> "消息"
-    "system_tool_schemas" -> "系统工具"
-    "mcp_tool_schemas" -> "MCP 工具"
-    "system_prompt" -> "系统提示词"
-    "skills" -> "技能"
-    "meta_user_context" -> "其他"
+private fun sourceLabel(ctx: android.content.Context, source: String): String = when (source) {
+    "messages" -> ctx.getString(R.string.usage_messages)
+    "system_tool_schemas" -> ctx.getString(R.string.usage_system_tools)
+    "mcp_tool_schemas" -> ctx.getString(R.string.usage_mcp_tools)
+    "system_prompt" -> ctx.getString(R.string.usage_system_prompt)
+    "skills" -> ctx.getString(R.string.usage_skills)
+    "meta_user_context" -> ctx.getString(R.string.usage_other)
     else -> source
 }
 
@@ -1754,7 +1774,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
         }
         Column {
             Text(title, style = MaterialTheme.typography.titleLarge)

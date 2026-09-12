@@ -1,5 +1,7 @@
 package app.zemote.ui.screens
 
+import app.zemote.R
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -34,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -45,6 +48,15 @@ private data class ChangelogEntry(
 )
 
 private val Changelogs = listOf(
+    ChangelogEntry(
+        "v1.5.7", "2026-09-13",
+        listOf(
+            "修复进入会话后一直加载、模型列表和历史拉不到的问题：连接恢复事件不再打断正在打开的会话，加载增加总超时兜底",
+            "新增界面语言设置：跟随系统 / 中文 / English，设置中可手动切换",
+            "大部分界面文案提供英文翻译",
+            "关于页新增作者信息与项目主页跳转",
+        ),
+    ),
     ChangelogEntry(
         "v1.5.6", "2026-09-13",
         listOf(
@@ -195,7 +207,7 @@ fun ChangelogScreen(onBack: () -> Unit) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
             }
-            Text("更新日志", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.changelog), style = MaterialTheme.typography.titleLarge)
         }
 
         LazyColumn(
