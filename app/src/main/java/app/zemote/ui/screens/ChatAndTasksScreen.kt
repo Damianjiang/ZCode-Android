@@ -714,14 +714,36 @@ private fun ComposerBar(
                             .padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 附件入口
+                        CircleAction(
+                            icon = Icons.Rounded.Add,
+                            contentDescription = "附件",
+                            onClick = {},
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        // 权限模式
+                        CircleAction(
+                            icon = Icons.Rounded.Check,
+                            contentDescription = "权限模式",
+                            selected = true,
+                            onClick = {},
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        // 模型选择
+                        ModelSelectorChip()
+                        Spacer(modifier = Modifier.width(10.dp))
+                        // 深度思考开关
+                        var thinkOn by remember { mutableStateOf(true) }
+                        CircleAction(
+                            icon = Icons.Rounded.Psychology,
+                            contentDescription = "深度思考",
+                            selected = thinkOn,
+                            onClick = { thinkOn = !thinkOn },
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
                         // 上下文容量（官方「上下文容量」弹窗）
                         ContextUsageChip(usage)
                         Spacer(modifier = Modifier.width(8.dp))
-                        // 选择模型（官方模型菜单；未知其他模型时仅展示当前项）
-                        ModelChip(config, onModelSelect)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        // 思考等级（低/中/高/最高；模型不支持时自动隐藏）
-                        ThoughtChip(config, onThoughtSelect)
                         Spacer(modifier = Modifier.weight(1f))
                         // 停止（仅 AI 工作中显示）
                         if (working) {
@@ -997,6 +1019,82 @@ private fun sourceLabel(source: String): String = when (source) {
 }
 
 /** 排队发送按钮：AI 回复中时把输入加入队列 */
+@Composable
+private fun CircleAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.size(36.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                icon,
+                contentDescription = contentDescription,
+                tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModelSelectorChip() {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Memory,
+                    contentDescription = "选择模型",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "agnes-2.5-flash",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                Icon(
+                    Icons.Rounded.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            val models = listOf("agnes-2.5-flash", "glm5.2", "DeepSeek白嫖", "glm白嫖")
+            for (m in models) {
+                DropdownMenuItem(
+                    text = { Text(m) },
+                    onClick = { open = false },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text("管理模型", style = MaterialTheme.typography.labelSmall) },
+                onClick = { open = false },
+            )
+        }
+    }
+}
+
 @Composable
 private fun QueueSendButton(onClick: () -> Unit) {
     FilledIconButton(
