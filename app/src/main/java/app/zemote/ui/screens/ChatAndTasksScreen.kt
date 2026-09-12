@@ -107,6 +107,7 @@ import app.zemote.state.AppSessionViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ────────────────────────── 任务会话列表 ──────────────────────────
@@ -305,9 +306,16 @@ fun ChatScreen(
             error = "设备未连接"
             return@LaunchedEffect
         }
-        runCatching { session.conversationFor(accountId, workspaceKey, sessionId) }
-            .onSuccess { repo = it }
-            .onFailure { error = it.message ?: "无法打开会话通道" }
+        // 快速进入时设备可能仍在重连（connections 里还没有 client），有限次重试而不是永久空白
+        var opened: app.zemote.protocol.ConversationV4Session? = null
+        for (attempt in 1..5) {
+            opened = runCatching { session.conversationFor(accountId, workspaceKey, sessionId) }
+                .getOrNull()
+            if (opened != null) break
+            delay(1500)
+        }
+        if (opened != null) repo = opened
+        else error = "设备未连接，无法打开会话，请返回重试"
     }
 
     // 会话标题数据源：sessions-index（幂等，重复调用自动跳过）
@@ -400,6 +408,27 @@ fun ChatScreen(
                 title = "无法打开对话",
                 body = errorMessage,
             )
+        } else if (repo == null) {
+            // 会话通道建立中：快速进入时等待设备就绪/bridge 打开，绝不留白屏
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(32.dp),
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        "正在打开会话…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         } else {
             Box(
                 modifier = Modifier
