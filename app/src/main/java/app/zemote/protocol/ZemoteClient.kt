@@ -219,6 +219,25 @@ class ZemoteClient(
                 dispatchPayload(payload)
             }
         }
+        // relay 层状态同步：断线/被抢占后重新配对成功时，恢复客户端状态并
+        // 重建所有 workspace bridge（服务端侧的桥已随断连失效）。
+        relayScope.launch {
+            var hasBeenPaired = false
+            relay.state.collect { st ->
+                when (st) {
+                    RelayState.PAIRED -> {
+                        _state.value = ZemoteClientState.PAIRED
+                        if (hasBeenPaired && activeBridges.isNotEmpty()) {
+                            onLog?.invoke("[client] relay re-paired, recovering ${activeBridges.size} bridge(s)")
+                            recoverActiveBridges()
+                        }
+                        hasBeenPaired = true
+                    }
+                    RelayState.KICKED -> _state.value = ZemoteClientState.KICKED
+                    else -> {}
+                }
+            }
+        }
     }
 
     private fun dispatchPayload(payload: Map<String, Any>) {

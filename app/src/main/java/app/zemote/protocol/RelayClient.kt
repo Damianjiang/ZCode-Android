@@ -282,21 +282,20 @@ class RelayClient(
     private fun handleRelayError(code: String?, message: String?) {
         onLog?.invoke("[relay] error: $code $message")
         if (code == "KICKED") {
-            // 单查看者模型：被踢说明有其他客户端（如官方网页）占用了会话。
-            // 桌面端不区分优先级，谁后连上谁持有——自动重连抢回，次数受限避免与官方客户端死斗。
-            if (kickRecoveryAttempted < 2 && !disposed) {
-                kickRecoveryAttempted++
-                scope.launch { _failures.emit(RelayFailure("session-conflict", message)) }
-                scope.launch {
-                    kotlinx.coroutines.delay(2000)
-                    reconnect()
-                }
-                return
-            }
-            _state.value = RelayState.KICKED
-            intentionallyClosed = true
-            scope.launch { _failures.emit(RelayFailure("kicked", message)) }
+            // 单查看者模型：被踢说明有其他客户端（如官方网页）占用了会话，桌面端"谁后连谁持有"。
+            // 立即抢回：短间隔持续重连（1s/2s/4s/8s 封顶），直到抢回或应用退出，不再"两次失败永久下线"。
+            if (disposed) return
+            kickRecoveryAttempted++
+            scope.launch { _failures.emit(RelayFailure("session-conflict", message)) }
             webSocket?.close(1000, "kicked")
+            _state.value = RelayState.RECONNECTING
+            val delayMs = (1000L shl (kickRecoveryAttempted - 1).coerceIn(0, 3)).coerceAtMost(8000L)
+            onLog?.invoke("[relay] kicked by another client, reclaiming in ${delayMs}ms (attempt $kickRecoveryAttempted)")
+            reconnectJob?.cancel()
+            reconnectJob = scope.launch {
+                delay(delayMs)
+                reconnect()
+            }
         }
     }
 

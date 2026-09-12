@@ -275,6 +275,17 @@ private fun WorkspaceList(
 
     LaunchedEffect(client, retryKey) { refresh() }
 
+    // 连接恢复后自动重新加载（断线重连、被其他客户端抢占后抢回等场景）
+    LaunchedEffect(client) {
+        var wasPaired = false
+        client.state.collect { st ->
+            if (st == app.zemote.protocol.ZemoteClient.ZemoteClientState.PAIRED) {
+                if (wasPaired) refresh()
+                wasPaired = true
+            }
+        }
+    }
+
     when {
         loading -> Column(
             modifier = Modifier.fillMaxSize(),

@@ -263,6 +263,40 @@ class ConversationV4Session private constructor(
     private var firstRowId: Long? = null
     private var totalCount = 0L
 
+    init {
+        // bridge 重连/重开后：旧 channel 栈与订阅全部作废，重置握手并整体重建，
+        // 对话与 sessions-index 订阅随 bridge 恢复自动回到工作状态
+        sessionScope.launch {
+            bridge.recovered.collect { count ->
+                if (count <= 0 || bridge.isDisposed) return@collect
+                log("[v4] bridge recovered, rebuilding subscriptions")
+                val hadSessionsIndex = siSubId != null
+                val activeId = _activeSessionId.value
+                handshakeDone = false
+                connectionId = null
+                convWatchdog?.cancel()
+                convCancel?.invoke(); convCancel = null
+                convSubId = null
+                siCancel?.invoke(); siCancel = null
+                siSubId = null
+                convSeq = 0
+                siSeq = 0
+                snapshotSeen = false
+                _pendingPatch = null
+                synchronized(stagedFrames) { stagedFrames.clear() }
+                synchronized(siStaged) { siStaged.clear() }
+                runCatching { ensureHandshake() }
+                    .onFailure { log("[v4] handshake after recovery failed: $it"); return@collect }
+                if (activeId != null) {
+                    runCatching { subscribeConversation(activeId) }
+                        .onFailure { log("[v4] resubscribe failed: $it") }
+                    runCatching { loadRows(activeId, limit = 200) }
+                }
+                if (hadSessionsIndex) runCatching { openSessionsIndex() }
+            }
+        }
+    }
+
     // ── scope：只保留官方使用的两个字段（多余字段可能干扰服务端校验） ──
     private fun scope(): Map<String, Any> = buildMap {
         val path = (scopeParams?.get("workspacePath") ?: workspaceKey)?.toString()
