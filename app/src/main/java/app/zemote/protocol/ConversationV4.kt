@@ -371,6 +371,60 @@ class ConversationV4Session private constructor(
         }
     }
 
+    /** 处理流式事件：text_delta / reasoning_delta / text_end / reasoning_end 等 */
+    private fun applyStreamingEvent(event: Map<*, *>) {
+        val kind = event["kind"] as? String ?: return
+        val delta = event["delta"] as? String ?: return
+        val assistantMsgId = event["assistantMessageId"] as? String
+
+        when {
+            kind.endsWith("_delta") -> {
+                // 找到最新的 assistantText 或 reasoning 行并追加内容
+                val targetKind = when {
+                    kind.startsWith("text") -> ConvKinds.ASSISTANT_TEXT
+                    kind.startsWith("reasoning") -> ConvKinds.REASONING
+                    kind.startsWith("tool_input") -> ConvKinds.TOOL_CALL
+                    else -> null
+                }
+                if (targetKind != null) {
+                    _rows.update { list ->
+                        // 找到最后一个匹配的行（流式输出的当前行）
+                        var idx = -1
+                            for ((i, r) in list.withIndex()) {
+                                if (r.kind == targetKind) idx = i
+                            }
+                        if (idx >= 0) {
+                            val row = list[idx]
+                            val updated = when (targetKind) {
+                                ConvKinds.ASSISTANT_TEXT -> row.copy(text = row.text + delta)
+                                ConvKinds.REASONING -> row.copy(text = row.text + delta)
+                                ConvKinds.TOOL_CALL -> row.copy(inputText = row.inputText + delta)
+                                else -> row
+                            }
+                            list.toMutableList().also { it[idx] = updated }
+                        } else {
+                            // 如果没有现有行，创建一个新的
+                            val newRow = ConvRow(
+                                rowId = System.currentTimeMillis(),
+                                kind = targetKind,
+                                text = delta,
+                            )
+                            list.toMutableList().also { it.add(newRow) }
+                        }
+                    }
+                }
+            }
+            kind.endsWith("_end") || kind == "finish" || kind == "text_end" || kind == "reasoning_end" -> {
+                // 标记行完成，清除 working 状态
+                _agentWorking.value = false
+            }
+            kind == "error" -> {
+                _agentWorking.value = false
+                client.onLog?.invoke("[v4] streaming error: ${event["delta"]}")
+            }
+        }
+    }
+
     /** 递归查找同时含有指定键的 map（快照嵌套层级不固定，防御式解析） */
     private fun findMapWithKeys(node: Any?, vararg keys: String): Map<*, *>? {
         if (node is Map<*, *>) {
