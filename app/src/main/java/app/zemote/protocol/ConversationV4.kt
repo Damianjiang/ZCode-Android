@@ -142,6 +142,8 @@ class ConversationV4Session private constructor(
 
     private val _usage = MutableStateFlow<ConvUsage?>(null)
     val usage: StateFlow<ConvUsage?> = _usage.asStateFlow()
+    
+
 
     // ── scope 构造：优先用 bootstrap 返回的完整工作区 map ──
     private fun scope(): Map<String, Any> {
