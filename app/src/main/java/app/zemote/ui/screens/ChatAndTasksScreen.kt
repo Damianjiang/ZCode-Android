@@ -58,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -140,7 +141,7 @@ fun TasksScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                ThinkingDot()
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(14.dp))
                 Text("正在获取会话…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -297,7 +298,10 @@ fun ChatScreen(
                                 .padding(top = 90.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            ThinkingDot()
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp),
+                            )
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
                                 "正在加载对话…",

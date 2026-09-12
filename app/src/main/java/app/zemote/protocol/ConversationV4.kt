@@ -183,8 +183,11 @@ class ConversationV4Session private constructor(
             conversationSubscribed = true
         }
         if (sessionId != null) {
-            runCatching { loadRows(sessionId, limit = 40) }
-                .onFailure { client.onLog?.invoke("[v4] loadRows failed: $it") }
+            try {
+                loadRows(sessionId, limit = 40)
+            } catch (e: Exception) {
+                client.onLog?.invoke("[v4] loadRows failed: ${e.message}")
+            }
         }
         _loading.value = false
     }
@@ -284,13 +287,25 @@ class ConversationV4Session private constructor(
     // ── 订阅帧处理（真实帧形：{topic, subscriptionId, payload:{kind:'snapshot'|'deltas', ...}}，
     //    EventFire 的 value2 是参数列表（[frame]））──
     private fun applyConversationFrame(frame: Any?) {
-        val f = (frame as? List<*>)?.firstOrNull() ?: frame
-        val map = f as? Map<*, *> ?: return
-        val payload = (map["payload"] as? Map<*, *>) ?: map
-        when (payload["kind"]) {
-            "snapshot" -> applySnapshot(payload["snapshot"] ?: payload["state"])
-            "deltas" -> applyOps(payload["deltas"] as? List<*>)
-            else -> applyOps((payload["ops"] ?: map["ops"]) as? List<*>)
+        try {
+            // EventFire value2 是参数列表（[eventArg]），取第一个元素
+            val raw = (frame as? List<*>)?.firstOrNull() ?: frame
+            // 可能直接就是 frame map，也可能包在 payload 字段里
+            val map = when {
+                raw is Map<*, *> -> raw
+                raw is List<*> && raw.isNotEmpty() && raw[0] is Map<*, *> -> raw[0] as Map<*, *>
+                else -> return
+            }
+            // 优先从 payload 取，兼容两种帧结构
+            val payload = (map["payload"] as? Map<*, *>) ?: map
+            val kind = payload["kind"] as? String
+            when (kind) {
+                "snapshot" -> applySnapshot(payload["snapshot"] ?: payload["state"])
+                "deltas" -> applyOps(payload["deltas"] as? List<*>)
+                else -> applyOps((payload["ops"] ?: map["ops"]) as? List<*>)
+            }
+        } catch (e: Exception) {
+            // 帧解析失败不阻塞主流程，静默忽略
         }
     }
 

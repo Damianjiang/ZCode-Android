@@ -72,6 +72,7 @@ class ChannelClient(
                     promiseHandlers.remove(id)?.complete(Pair(type, data))
                 }
                 RES_EVENT_FIRE -> {
+                    // EventFire: data 是 [eventFrame] 列表（ML Kit / web 统一格式）
                     eventHandlers[id]?.invoke(data)
                 }
             }
