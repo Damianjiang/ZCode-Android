@@ -60,7 +60,7 @@ class RelayClient(
     private var reconnectAttempt = 0
     private var heartbeatTick = 0
     private var staleProbeSent = false
-    private var kickRecoveryAttempted = false
+    private var kickRecoveryAttempted = 0
     private var lastInboundAt = System.currentTimeMillis()
     private var lastPairStatusAckAt = System.currentTimeMillis()
 
@@ -120,7 +120,7 @@ class RelayClient(
         disposed = false
         intentionallyClosed = false
         reconnectAttempt = 0
-        kickRecoveryAttempted = false
+        kickRecoveryAttempted = 0
         _state.value = RelayState.CONNECTING
         connect()
     }
@@ -269,7 +269,7 @@ class RelayClient(
             "matched" -> {
                 rewaitJob?.cancel()
                 reconnectAttempt = 0
-                kickRecoveryAttempted = false
+                kickRecoveryAttempted = 0
                 clearWaitingTimer()
                 _state.value = RelayState.PAIRED
                 wasPaired = true
@@ -282,13 +282,15 @@ class RelayClient(
     private fun handleRelayError(code: String?, message: String?) {
         onLog?.invoke("[relay] error: $code $message")
         if (code == "KICKED") {
-            val detail = (message ?: "").lowercase()
-            val transient = detail.contains("conflict") || detail.contains("duplicate") ||
-                    detail.contains("already connected") || detail.contains("another connection")
-            if (!kickRecoveryAttempted && (_state.value == RelayState.AUTHENTICATING || transient)) {
-                kickRecoveryAttempted = true
+            // 单查看者模型：被踢说明有其他客户端（如官方网页）占用了会话。
+            // 桌面端不区分优先级，谁后连上谁持有——自动重连抢回，次数受限避免与官方客户端死斗。
+            if (kickRecoveryAttempted < 2 && !disposed) {
+                kickRecoveryAttempted++
                 scope.launch { _failures.emit(RelayFailure("session-conflict", message)) }
-                reconnect()
+                scope.launch {
+                    kotlinx.coroutines.delay(2000)
+                    reconnect()
+                }
                 return
             }
             _state.value = RelayState.KICKED
