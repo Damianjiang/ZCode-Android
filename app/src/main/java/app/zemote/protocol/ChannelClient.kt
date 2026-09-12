@@ -72,8 +72,7 @@ class ChannelClient(
                     promiseHandlers.remove(id)?.complete(Pair(type, data))
                 }
                 RES_EVENT_FIRE -> {
-                    // EventFire: data 是 [eventFrame] 列表
-                    onLog?.invoke("[ipc] EVENT_FIRE id=$id data=${data?.toString()?.let { if (it.length > 500) it.substring(0, 500) + "..." else it }}")
+                    // EventFire: data 是 [eventFrame] 列表（热路径，不做日志）
                     eventHandlers[id]?.invoke(data)
                 }
             }
@@ -97,12 +96,10 @@ class ChannelClient(
         val id = lastRequestId++
         val completer = CompletableDeferred<Pair<Int, Any?>>()
         promiseHandlers[id] = completer
-        onLog?.invoke("[ipc] call ${channel.channelName}.$method id=$id")
         val writer = ValueWriter()
         encodeValue(writer, listOf(REQ_PROMISE, id, channel.channelName, method))
         encodeValue(writer, args)
         sendBody(writer.toByteArray())
-        onLog?.invoke("[ipc] awaiting id=$id (timeout=${timeoutMs}ms)")
         val (resType, data) = try {
             kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -114,7 +111,6 @@ class ChannelClient(
             onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
             throw TimeoutException("${channel.channelName}.$method timed out")
         }
-        onLog?.invoke("[ipc] resolved id=$id type=$resType")
         return when (resType) {
             RES_PROMISE_SUCCESS -> data
             RES_PROMISE_ERROR, RES_PROMISE_ERROR_OBJ -> throw ChannelRpcError(data?.toString() ?: "unknown error", data)

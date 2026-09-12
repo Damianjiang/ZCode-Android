@@ -752,7 +752,17 @@ private fun ImageAttachmentView(
     LaunchedEffect(ref) {
         val data = runCatching { loadAttachment(ref) }.getOrNull()
         val bmp = data?.bytes?.let { bytes ->
-            runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }.getOrNull()
+            runCatching {
+                // 大图降采样解码（最长边 ~2048px），防止整图 bitmap 爆内存
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 2048) sample *= 2
+                BitmapFactory.decodeByteArray(
+                    bytes, 0, bytes.size,
+                    BitmapFactory.Options().apply { inSampleSize = sample },
+                )
+            }.getOrNull()
         }
         if (bmp != null) bitmap = bmp else failed = true
     }

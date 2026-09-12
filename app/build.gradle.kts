@@ -23,6 +23,8 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+        // 只保留中英文资源，剥掉 androidx 库携带的几十种语言
+        resourceConfigurations += listOf("zh", "zh-rCN", "en")
     }
 
     buildTypes {
@@ -70,16 +72,10 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.security.crypto)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.view)
-    implementation(libs.mlkit.barcode.scanning)
     implementation(libs.okhttp)
     implementation(libs.gson)
     debugImplementation(libs.androidx.ui.tooling)

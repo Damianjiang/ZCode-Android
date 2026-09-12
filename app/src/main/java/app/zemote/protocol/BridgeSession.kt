@@ -45,18 +45,9 @@ class BridgeSession(
         scope.launch {
             relayClient.payloads.collect { payload ->
                 val type = payload["zcode_type"] as? String
-                // 临时诊断：打印所有非 rpc-frame 的载荷类型
-                if (type != null && type != "rpc-frame" && type != "rpc-frame-ack") {
-                    onLog?.invoke("[relay] payload type=$type keys=${payload.keys}")
-                }
                 val bsid = payload["bridgeSessionId"] as? String
-                if (type in listOf("rpc-frame", "rpc-frame-ack")) {
-                    if (bsid == bridgeSessionId) {
-                        _transport.acceptPayload(payload)
-                    } else {
-                        // 临时诊断：bridge id 不匹配的帧（可能被丢弃的响应）
-                        onLog?.invoke("[relay] DROPPED $type bsid=$bsid (mine=$bridgeSessionId) seq=${payload["messageSeq"]}/${payload["ackMessageSeq"]}")
-                    }
+                if (type in listOf("rpc-frame", "rpc-frame-ack") && bsid == bridgeSessionId) {
+                    _transport.acceptPayload(payload)
                 }
             }
         }
