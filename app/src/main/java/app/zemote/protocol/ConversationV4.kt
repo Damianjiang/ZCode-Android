@@ -186,7 +186,7 @@ class ConversationV4Session private constructor(
         }
         if (sessionId != null) {
             try {
-                loadRows(sessionId, limit = 40)
+                loadRows(sessionId, limit = 200)
             } catch (e: Exception) {
                 client.onLog?.invoke("[v4] loadRows failed: ${e.message}")
             }
@@ -213,7 +213,7 @@ class ConversationV4Session private constructor(
     }
 
     /** 历史行窗口（分页：beforeRowId 传当前最早一行的 rowId） */
-    suspend fun loadRows(sessionId: String, limit: Int = 120, beforeRowId: String? = null): List<ConvRow> = withContext(Dispatchers.IO) {
+    suspend fun loadRows(sessionId: String, limit: Int = 200, beforeRowId: String? = null): List<ConvRow> = withContext(Dispatchers.IO) {
         val args = scope() + buildMap<String, Any> {
             put("sessionId", sessionId)
             put("limit", limit.toLong())
