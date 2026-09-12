@@ -85,29 +85,30 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
 
         Spacer(modifier = Modifier.size(18.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Zemote 崩溃日志", log))
-                    Toast.makeText(context, "崩溃日志已复制", Toast.LENGTH_SHORT).show()
-                },
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("复制日志")
-            }
-            Button(
-                onClick = onRestart,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("清除并重启")
-            }
+        Button(
+            onClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Zemote 崩溃日志", log))
+                Toast.makeText(context, "崩溃日志已复制，可粘贴反馈给开发者", Toast.LENGTH_SHORT).show()
+            },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("复制崩溃日志（反馈给开发者）")
+        }
+
+        Spacer(modifier = Modifier.size(10.dp))
+
+        OutlinedButton(
+            onClick = onRestart,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("清除日志并重启应用")
         }
     }
 }

@@ -12,11 +12,14 @@ import java.util.concurrent.TimeoutException
 /**
  * Channel RPC client mirroring the web client's Pne.
  *
- * Request: encodeValue([reqType, reqId, channelName, name], args) +
- *   IpcFraming.encode() → sendBody() → RpcFrameTransport.sendMessage() → rpc-frames
+ * 移动 relay 上的 rpc-frame 携带的是裸 value-list（不带 IPC framing 头）——
+ * 已由 .proto_exp.py 裸 socket 实验证实：带 13 字节头的消息会被桌面端静默丢弃。
  *
- * Response: rpc-frames → RpcFrameTransport.assemble → IpcFraming.decode(header) +
- *   decodeValue(data) → match by reqId → complete completer
+ * Request: encodeValue([reqType, reqId, channelName, name], args) →
+ *   sendBody() → RpcFrameTransport.sendMessage() → rpc-frame
+ *
+ * Response: rpc-frames → RpcFrameTransport reassemble → handleMessage 解码
+ *   value-list → 按 reqId 匹配 completer。
  */
 class ChannelClient(
     private val sendBody: (ByteArray) -> Unit,
@@ -41,20 +44,14 @@ class ChannelClient(
     }
 
     private var lastRequestId = 0
-    private val ready = CompletableDeferred<Unit>()
     private val promiseHandlers = ConcurrentHashMap<Int, CompletableDeferred<Pair<Int, Any?>>>()
     private val eventHandlers = ConcurrentHashMap<Int, (Any?) -> Unit>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    suspend fun awaitReady(timeoutMs: Long = 30_000L) {
-        try { kotlinx.coroutines.withTimeout(timeoutMs) { ready.await() } }
-        catch (e: Exception) { throw TimeoutException("channel init timeout ($timeoutMs ms)") }
-    }
-
     /**
-     * Called by [RpcFrameTransport.onMessage] with the FULL assembled IPC frame
-     * (13-byte framing header + encoded value-list). Decodes the header to
-     * extract type, request id, and payload data.
+     * Called by [RpcFrameTransport.onMessage] with the assembled RAW value-list
+     * (no framing header). Decodes the header to extract type, request id, and
+     * payload data.
      */
     internal fun handleMessage(frame: ByteArray) {
         try {
@@ -63,9 +60,8 @@ class ChannelClient(
             if (header.isEmpty() || header[0] !is Number) return
             val type = (header[0] as Number).toInt()
             if (type == RES_INITIALIZE) {
-                onLog?.invoke("[ipc] initialized")
-                if (!ready.isCompleted) ready.complete(Unit)
-                // 官方客户端对 Initialize 不回包，服务端靠 rpc-frame-ack 判断投递成功
+                // 桌面端在收到首条消息后发来 Initialize([200]+null)，无需应答
+                onLog?.invoke("[ipc] host initialize")
                 return
             }
             if (header.size < 2 || header[1] !is Number) return
@@ -86,8 +82,9 @@ class ChannelClient(
 
     /**
      * Sends a request over [channel].[method] with [args] and returns the result.
-     * Encodes the value-list, prepends the 13-byte IPC framing header, then
-     * sends via [sendBody] (which wraps it in rpc-frames).
+     * Encodes the raw value-list and sends via [sendBody]（rpc-frame 化在
+     * transport 内完成）。不等待握手：桌面端的 Initialize 是收到首条消息后才
+     * 下发的，先等后发会死锁。
      */
     suspend fun call(
         channel: Channel,
@@ -95,7 +92,6 @@ class ChannelClient(
         args: List<Any?> = emptyList(),
         timeoutMs: Long = 30_000L,
     ): Any? {
-        awaitReady(timeoutMs)
         val id = lastRequestId++
         val completer = CompletableDeferred<Pair<Int, Any?>>()
         promiseHandlers[id] = completer
@@ -103,8 +99,7 @@ class ChannelClient(
         val writer = ValueWriter()
         encodeValue(writer, listOf(REQ_PROMISE, id, channel.channelName, method))
         encodeValue(writer, args)
-        // Prepend 13-byte IPC framing header so the assembled message is complete
-        sendBody(IpcFraming.encode(writer.toByteArray()))
+        sendBody(writer.toByteArray())
         onLog?.invoke("[ipc] awaiting id=$id (timeout=${timeoutMs}ms)")
         val (resType, data) = try {
             kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
@@ -145,19 +140,16 @@ class ChannelClient(
             val writer = ValueWriter()
             encodeValue(writer, listOf(REQ_EVENT_LISTEN, id, channel.channelName, event))
             encodeValue(writer, arg)
-            sendBody(IpcFraming.encode(writer.toByteArray()))
+            sendBody(writer.toByteArray())
         }
-        scope.launch {
-            try { awaitReady() } catch (_: Exception) {}
-            send()
-        }
+        send()
         return {
             eventHandlers.remove(id)
             if (sent) {
                 val writer = ValueWriter()
                 encodeValue(writer, listOf(REQ_EVENT_DISPOSE, id, channel.channelName, event))
                 encodeValue(writer, null)
-                sendBody(IpcFraming.encode(writer.toByteArray()))
+                sendBody(writer.toByteArray())
             }
         }
     }
@@ -166,7 +158,6 @@ class ChannelClient(
         scope.cancel()
         promiseHandlers.clear()
         eventHandlers.clear()
-        if (!ready.isCompleted) ready.completeExceptionally(Throwable("disposed"))
     }
 }
 

@@ -38,3 +38,7 @@ web-download/app-debug.apk
 
 # 官方 JS 逆向分析产物（不入库）
 .webref/
+
+# 临时协议实验脚本
+.proto_exp.py
+.proto_exp2.py

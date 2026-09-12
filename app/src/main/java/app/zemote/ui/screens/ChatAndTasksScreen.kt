@@ -36,18 +36,22 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Circle
+import androidx.compose.material.icons.rounded.DataUsage
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SmartToy
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,7 +71,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -90,7 +93,7 @@ fun TasksScreen(
     workspaceKey: String,
     session: AppSessionViewModel,
     onBack: () -> Unit,
-    onOpenSession: (String?) -> Unit,
+    onOpenSession: (entry: app.zemote.protocol.TaskEntry?) -> Unit,
 ) {
     val accountId = session.activeId
     var tasks by remember { mutableStateOf<List<app.zemote.protocol.TaskEntry>>(emptyList()) }
@@ -153,7 +156,7 @@ fun TasksScreen(
                             title = entry.title,
                             subtitle = entry.workspaceLabel,
                             highlight = true,
-                            onClick = { onOpenSession(entry.taskId) },
+                            onClick = { onOpenSession(entry) },
                         )
                     }
                 }
@@ -164,7 +167,7 @@ fun TasksScreen(
                             title = entry.title,
                             subtitle = entry.workspaceLabel,
                             highlight = false,
-                            onClick = { onOpenSession(entry.taskId) },
+                            onClick = { onOpenSession(entry) },
                         )
                     }
                 }
@@ -235,21 +238,25 @@ fun ChatScreen(
 
     LaunchedEffect(repo, sessionId) {
         repo?.openConversation(sessionId)
-        // 历史行仍未到达 → 桌面端版本对该通道无响应（兼容性提示）
-        kotlinx.coroutines.delay(8000)
+        // 历史行 8s 仍未到达 → 该会话暂无可见消息
+        kotlinx.coroutines.delay(5000)
         if (repo?.rows?.value.isNullOrEmpty()) historyUnavailable = true
         else historyUnavailable = false
     }
 
     val rows by (repo?.rows?.collectAsState() ?: remember { mutableStateOf(emptyList<ConvRow>()) })
     val working by (repo?.agentWorking?.collectAsState() ?: remember { mutableStateOf(false) })
+    val loading by (repo?.loading?.collectAsState() ?: remember { mutableStateOf(false) })
+    val convConfig by (repo?.convConfig?.collectAsState() ?: remember { mutableStateOf(null) })
+    val usage by (repo?.usage?.collectAsState() ?: remember { mutableStateOf(null) })
     val activeId by (repo?.activeSessionId?.collectAsState() ?: remember { mutableStateOf(sessionId) })
 
-    // 新消息自动滚到底部
-    LaunchedEffect(rows.size) {
+    // 新消息自动滚到底部（+1 偏移：空态提示占一个 item 位）
+    LaunchedEffect(rows.size, historyUnavailable) {
         if (rows.isNotEmpty()) {
             historyUnavailable = false
-            listState.animateScrollToItem(rows.size - 1)
+            val target = rows.size - 1 + if (historyUnavailable) 1 else 0
+            listState.animateScrollToItem(target.coerceAtLeast(0))
         }
     }
 
@@ -282,7 +289,24 @@ fun ChatScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (historyUnavailable) {
+                if (loading && rows.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 90.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            ThinkingDot()
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                "正在加载对话…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                } else if (historyUnavailable) {
                     item {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -290,7 +314,7 @@ fun ChatScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
-                                "暂未收到该会话的历史消息：当前桌面版本对移动端会话通道的兼容性有限。\n输入栏发送功能仍可用，历史消息的展示将在后续版本适配。",
+                                "该会话暂无可见消息。\n可以直接在下方输入框发起新话题。",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(14.dp),
@@ -321,6 +345,14 @@ fun ChatScreen(
                 onTextChange = { input = it },
                 working = working,
                 enabled = repo != null && error == null,
+                config = convConfig,
+                usage = usage,
+                onThoughtSelect = { level ->
+                    scope.launch { runCatching { repo?.setThought(level) } }
+                },
+                onModelSelect = { provider, model ->
+                    scope.launch { runCatching { repo?.setModel(provider, model) } }
+                },
                 onSend = { queued ->
                     val text = input
                     input = ""
@@ -332,6 +364,12 @@ fun ChatScreen(
                                 activeId,
                                 requestedDelivery = if (queued) "queue" else "startNow",
                             )
+                            // 实时帧兜底：发送后短轮询刷新，确保新回合尽快可见
+                            val repo0 = repo ?: return@launch
+                            repeat(3) {
+                                kotlinx.coroutines.delay(2500)
+                                runCatching { repo0.loadRows(repo0.activeSessionId.value ?: return@repeat) }
+                            }
                         }.onFailure { input = text }
                     }
                 },
@@ -350,10 +388,8 @@ private fun TimelineRow(row: ConvRow) {
     when (row.kind) {
         ConvKinds.USER_INPUT -> UserBubble(row)
         ConvKinds.ASSISTANT_TEXT -> if (row.text.isNotBlank()) {
-            Text(
-                row.text,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
+            app.zemote.ui.components.MarkdownText(
+                markdown = row.text,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -414,16 +450,24 @@ private fun UserBubble(row: ConvRow) {
     }
 }
 
-/** 思考块：默认折叠的"🧠 思考"，点击展开全文 */
+/** 思考块：流式输出中自动展开，完成后自动折叠；用户手动切换后不再自动干预 */
 @Composable
 private fun ThinkingBlock(row: ConvRow) {
-    var expanded by remember(row.rowId) { mutableStateOf(false) }
+    val streaming = row.state == null || row.state !in app.zemote.protocol.COMPLETE_STATES
+    var expanded by remember(row.rowId) { mutableStateOf(true) }
+    var userToggled by remember(row.rowId) { mutableStateOf(false) }
+    LaunchedEffect(streaming) {
+        if (!userToggled) expanded = streaming
+    }
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(14.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded },
+            .clickable {
+                userToggled = true
+                expanded = !expanded
+            },
     ) {
         Column(
             modifier = Modifier
@@ -439,10 +483,14 @@ private fun ThinkingBlock(row: ConvRow) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "思考",
+                    if (streaming) "思考中…" else "思考",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (streaming) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    ThinkingDot()
+                }
                 Spacer(modifier = Modifier.weight(1f))
                 Icon(
                     if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
@@ -463,29 +511,39 @@ private fun ThinkingBlock(row: ConvRow) {
     }
 }
 
-/** 工具调用块：终端 / 查阅 / 更改 / 子任务，输出默认折叠 */
+/** 工具调用卡片：调用工具 · 工具名 + 目标（文件名/描述），输出默认折叠 */
 @Composable
 private fun ToolCallBlock(row: ConvRow) {
     var expanded by remember(row.rowId) { mutableStateOf(false) }
-    val (icon, label) = when (row.toolName) {
-        "terminal", "bash" -> Icons.Rounded.Terminal to "终端"
-        "search", "read", "grep", "glob" -> Icons.Rounded.Search to "查阅"
-        "edit", "write", "multiedit" -> Icons.Rounded.Edit to "更改"
-        "subagent" -> Icons.Rounded.SmartToy to "子任务"
+    val name = row.toolName?.lowercase()
+    val (icon, label) = when (name) {
+        "terminal", "bash", "run_command" -> Icons.Rounded.Terminal to "终端"
+        "read" -> Icons.Rounded.Search to "读取"
+        "search", "grep", "glob", "websearch", "web_fetch" -> Icons.Rounded.Search to "查阅"
+        "edit" -> Icons.Rounded.Edit to "编辑"
+        "write" -> Icons.Rounded.Edit to "写入"
+        "multiedit", "notebookedit" -> Icons.Rounded.Edit to "批量编辑"
+        "task", "subagent" -> Icons.Rounded.SmartToy to "子任务"
+        null -> Icons.Rounded.Memory to "工具"
         else -> Icons.Rounded.Memory to (row.toolName ?: "工具")
     }
+    // inputText 官方是 JSON（如 {"command":..., "description":...} / {"filePath":...}）
+    val summary = remember(row.rowId, row.inputText) { summarizeToolInput(name, row.inputText) }
+    val running = row.toolStatus == null || row.toolStatus == "running" || row.toolStatus == "pending"
     val hasOutput = row.outputText.isNotBlank()
 
     Surface(
-        color = Color.Transparent,
-        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = hasOutput) { expanded = !expanded },
+            .clickable(enabled = hasOutput) {
+                expanded = !expanded
+            },
     ) {
         Column(
             modifier = Modifier
-                .padding(vertical = 4.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
                 .animateContentSize(),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -493,18 +551,18 @@ private fun ToolCallBlock(row: ConvRow) {
                     icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(15.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (row.inputText.isNotBlank()) {
+                if (summary.isNotBlank()) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        row.inputText.replace("\n", " "),
+                        summary,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -513,6 +571,13 @@ private fun ToolCallBlock(row: ConvRow) {
                     )
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
+                }
+                if (running) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    ThinkingDot()
+                } else if (row.toolStatus == "error") {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("失败", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
                 }
                 if (row.additions != null && row.additions > 0) {
                     Spacer(modifier = Modifier.width(6.dp))
@@ -523,6 +588,7 @@ private fun ToolCallBlock(row: ConvRow) {
                     )
                 }
                 if (hasOutput) {
+                    Spacer(modifier = Modifier.width(4.dp))
                     Icon(
                         if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
                         contentDescription = null,
@@ -547,11 +613,41 @@ private fun ToolCallBlock(row: ConvRow) {
     }
 }
 
-// ────────────────────────── 发送栏（新版布局） ──────────────────────────
+/**
+ * 从官方 toolCall 的 inputText（JSON）提取摘要：
+ * 文件类工具 → 文件名；bash/终端 → 命令描述（不显示文件名）；其余 → 原始一行。
+ */
+private fun summarizeToolInput(tool: String?, raw: String): String {
+    if (raw.isBlank()) return ""
+    if (!raw.startsWith("{")) return raw.substringBefore('\n')
+    return try {
+        val obj = org.json.JSONObject(raw)
+        when (tool) {
+            "edit", "write", "read", "multiedit", "notebookedit" ->
+                fileNameOf(obj.optString("filePath").ifBlank {
+                    obj.optString("file_path").ifBlank { obj.optString("notebook_path") }
+                }).ifBlank { obj.optString("description") }
+            else ->
+                obj.optString("description").ifBlank {
+                    obj.optString("command").ifBlank {
+                        obj.optString("pattern").ifBlank { obj.optString("query").ifBlank { raw } }
+                    }
+                }
+        }
+    } catch (_: Exception) {
+        raw.substringBefore('\n')
+    }
+}
+
+private fun fileNameOf(path: String): String =
+    path.substringAfterLast('\\').substringAfterLast('/').trim()
+
+// ────────────────────────── 发送栏（官方功能布局） ──────────────────────────
 
 /**
  * 全新发送栏：一个圆角胶囊容器，上输入、下控制条。
- * AI 回复中时输入自动进入队列（官方 queue 语义），停止按钮独立显示。
+ * 左侧：上下文容量 / 选择模型 / 思考等级（均来自官方 V4 状态帧）；
+ * 右侧：排队发送 / 停止 / 发送。AI 回复中时输入自动进入队列（官方 queue 语义）。
  */
 @Composable
 private fun ComposerBar(
@@ -559,6 +655,10 @@ private fun ComposerBar(
     onTextChange: (String) -> Unit,
     working: Boolean,
     enabled: Boolean,
+    config: app.zemote.protocol.ConvConfig?,
+    usage: app.zemote.protocol.ConvUsage?,
+    onThoughtSelect: (String) -> Unit,
+    onModelSelect: (provider: String, model: String) -> Unit,
     onSend: (queued: Boolean) -> Unit,
     onStop: () -> Unit,
 ) {
@@ -607,40 +707,18 @@ private fun ComposerBar(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 8.dp, end = 10.dp, bottom = 8.dp),
+                            .padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // 附件入口
-                        CircleAction(
-                            icon = Icons.Rounded.Add,
-                            contentDescription = "附件",
-                            onClick = { },
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        // 权限模式（占位）
-                        CircleAction(
-                            icon = Icons.Rounded.Check,
-                            contentDescription = "权限模式",
-                            selected = true,
-                            onClick = { },
-                        )
+                        // 上下文容量（官方「上下文容量」弹窗）
+                        ContextUsageChip(usage)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // 选择模型（官方模型菜单；未知其他模型时仅展示当前项）
+                        ModelChip(config, onModelSelect)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // 思考等级（低/中/高/最高；模型不支持时自动隐藏）
+                        ThoughtChip(config, onThoughtSelect)
                         Spacer(modifier = Modifier.weight(1f))
-                        // 模型选择（占位）
-                        CircleAction(
-                            icon = Icons.Rounded.Memory,
-                            contentDescription = "模型",
-                            onClick = { },
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        // 深度思考开关
-                        var thinkOn by remember { mutableStateOf(true) }
-                        CircleAction(
-                            icon = Icons.Rounded.Psychology,
-                            contentDescription = "深度思考",
-                            selected = thinkOn,
-                            onClick = { thinkOn = !thinkOn },
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
                         // 停止（仅 AI 工作中显示）
                         if (working) {
                             FilledIconButton(
@@ -650,9 +728,9 @@ private fun ComposerBar(
                                     containerColor = MaterialTheme.colorScheme.error,
                                     contentColor = MaterialTheme.colorScheme.onError,
                                 ),
-                                modifier = Modifier.size(44.dp),
+                                modifier = Modifier.size(40.dp),
                             ) {
-                                Icon(Icons.Rounded.Stop, contentDescription = "停止", modifier = Modifier.size(20.dp))
+                                Icon(Icons.Rounded.Stop, contentDescription = "停止", modifier = Modifier.size(18.dp))
                             }
                             if (text.isNotBlank()) {
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -668,12 +746,12 @@ private fun ComposerBar(
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary,
                                 ),
-                                modifier = Modifier.size(44.dp),
+                                modifier = Modifier.size(40.dp),
                             ) {
                                 Icon(
                                     Icons.AutoMirrored.Rounded.Send,
                                     contentDescription = "发送",
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         }
@@ -682,6 +760,236 @@ private fun ComposerBar(
             }
         }
     }
+}
+
+/** 思考等级中文标签（官方 thought 取值） */
+private fun thoughtLabel(level: String): String = when (level.lowercase()) {
+    "off", "none", "disabled" -> "关闭"
+    "nothink", "no-think", "no_think" -> "不思考"
+    "on", "enabled" -> "开启"
+    "low", "light", "minimal", "shallow" -> "低"
+    "medium", "balanced", "default" -> "中"
+    "high" -> "高"
+    "xhigh", "extra-high", "extra_high", "very-high", "very_high" -> "超高"
+    "max", "maximum" -> "最高"
+    else -> level
+}
+
+/** 思考等级选择：选项来自模型的 thoughtLevels；不支持思考的模型自动隐藏 */
+@Composable
+private fun ThoughtChip(config: app.zemote.protocol.ConvConfig?, onThoughtSelect: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    if (config == null || !config.thoughtSupported) return
+    Box {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Psychology,
+                    contentDescription = "思考等级",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    thoughtLabel(config.thought ?: config.thoughtLevels.last()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            for (level in config.thoughtLevels) {
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(thoughtLabel(level))
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (level == config.thought) {
+                                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    onClick = {
+                        open = false
+                        onThoughtSelect(level)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** 模型选择：展示当前模型；管理模型入口在移动端隐藏 */
+@Composable
+private fun ModelChip(
+    config: app.zemote.protocol.ConvConfig?,
+    onModelSelect: (provider: String, model: String) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    if (config?.model.isNullOrBlank()) return
+    Box {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.Memory,
+                    contentDescription = "选择模型",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    config?.model ?: "",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+                Icon(
+                    Icons.Rounded.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(config?.model ?: "")
+                        Spacer(modifier = Modifier.weight(1f))
+                        Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                },
+                onClick = { open = false },
+            )
+            DropdownMenuItem(
+                text = { Text("切换思考等级请点右侧按钮", style = MaterialTheme.typography.labelSmall) },
+                onClick = {},
+                enabled = false,
+            )
+        }
+    }
+}
+
+/** 上下文容量：显示百分比，点击弹出官方样式明细（消息/系统工具/MCP 工具/系统提示词/技能/其他 + 缓存命中率） */
+@Composable
+private fun ContextUsageChip(usage: app.zemote.protocol.ConvUsage?) {
+    var open by remember { mutableStateOf(false) }
+    if (usage == null || usage.maxTokens <= 0L) return
+    val pct = (usage.ratio * 100).coerceIn(0f, 100f)
+    Box {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Rounded.DataUsage,
+                    contentDescription = "上下文容量",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "${pct.toInt()}%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).width(252.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "上下文容量",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        "${usage.usedTokens / 10000}万/${usage.maxTokens / 10000}万（${pct.toInt()}%）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                val total = usage.breakdown.sumOf { it.second }.coerceAtLeast(1L)
+                for ((source, chars) in usage.breakdown.sortedByDescending { it.second }) {
+                    val label = sourceLabel(source)
+                    val share = (chars.toDouble() / total * 100)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.Circle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = (0.35f + 0.65f * share / 100.0f).toFloat()),
+                            modifier = Modifier.size(9.dp),
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            if (share >= 1.0) "${share.toInt()}%" else "0%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (usage.hitRate != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "平均缓存命中率",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            "${(usage.hitRate * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun sourceLabel(source: String): String = when (source) {
+    "messages" -> "消息"
+    "system_tool_schemas" -> "系统工具"
+    "mcp_tool_schemas" -> "MCP 工具"
+    "system_prompt" -> "系统提示词"
+    "skills" -> "技能"
+    "meta_user_context" -> "其他"
+    else -> source
 }
 
 /** 排队发送按钮：AI 回复中时把输入加入队列 */
@@ -697,32 +1005,6 @@ private fun QueueSendButton(onClick: () -> Unit) {
         modifier = Modifier.size(44.dp),
     ) {
         Icon(Icons.Rounded.PlaylistAdd, contentDescription = "排队发送", modifier = Modifier.size(20.dp))
-    }
-}
-
-@Composable
-private fun CircleAction(
-    icon: ImageVector,
-    contentDescription: String,
-    selected: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
-        else MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = Modifier.size(36.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                icon,
-                contentDescription = contentDescription,
-                tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-        }
     }
 }
 

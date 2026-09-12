@@ -191,8 +191,7 @@ fun AccountsScreen(
         AddDeviceBottomSheet(
             onDismiss = { showAddSheet = false },
             onScan = {
-                showAddSheet = false
-                scope.launch { snackHost.showSnackbar("扫码功能即将上线，请先粘贴链接添加") }
+                scope.launch { snackHost.showSnackbar("扫码功能需相机依赖，可手动粘贴远程控制链接添加设备") }
             },
             onUrlSubmit = { url, label ->
                 showAddSheet = false

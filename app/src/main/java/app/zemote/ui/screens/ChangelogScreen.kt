@@ -46,6 +46,17 @@ private data class ChangelogEntry(
 
 private val Changelogs = listOf(
     ChangelogEntry(
+        "v1.5.0", "2026-09-12",
+        listOf(
+            "🎉 对话协议全面打通：通过裸 socket 逆向定位根因——rpc-frame 必须携带裸 IPC 编码（去掉 13 字节帧头），桌面端此前静默丢弃我们的消息",
+            "🎉 历史消息完整可见：userInput / assistantText / toolCall / reasoning 全部渲染",
+            "🎉 新增 hello + clientHello 握手，修复 fault.connection.handshakeRequired 拒绝",
+            "🎉 对话发送实测可用：发出消息、AI 正常回复并实时显示（官方 queue/startNow 语义）",
+            "工具调用行按实测数据优化：识别 Bash/Edit/Read 等工具名，自动提取命令描述摘要，展示成功/失败状态",
+            "任务打开时使用各自所属工作区，跨目录任务不再错绑",
+        ),
+    ),
+    ChangelogEntry(
         "v1.4.1", "2026-09-12",
         listOf(
             "⚡ 性能优化：分发版改用 R8 深度优化 + 资源收缩，启动更快、运行更流畅、体积更小",

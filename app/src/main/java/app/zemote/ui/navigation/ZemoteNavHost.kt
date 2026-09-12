@@ -109,8 +109,10 @@ fun ZemoteNavHost(
                 workspaceKey = workspaceKey,
                 session = sessionViewModel,
                 onBack = { navController.popBackStack() },
-                onOpenSession = { sessionId ->
-                    navController.navigate(Screen.Chat.createRoute(workspaceKey, sessionId ?: "new"))
+                onOpenSession = { entry ->
+                    // 每个任务用自己所属 workspace 打开（任务可能来自不同目录）
+                    val wk = entry?.workspacePath ?: workspaceKey
+                    navController.navigate(Screen.Chat.createRoute(wk, entry?.taskId ?: "new"))
                 },
             )
         }
