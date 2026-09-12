@@ -49,6 +49,14 @@ private data class ChangelogEntry(
 
 private val Changelogs = listOf(
     ChangelogEntry(
+        "v1.5.8", "2026-09-13",
+        listOf(
+            "会话打开后历史为空时自动补拉两次，并触发服务端强制快照重推",
+            "模型列表拉取为空时自动重试，桌面端冷启动不再拿到空列表",
+            "加载链路增加诊断日志（拉取行数、失败形态），便于定位问题",
+        ),
+    ),
+    ChangelogEntry(
         "v1.5.7", "2026-09-13",
         listOf(
             "修复进入会话后一直加载、模型列表和历史拉不到的问题：连接恢复事件不再打断正在打开的会话，加载增加总超时兜底",
