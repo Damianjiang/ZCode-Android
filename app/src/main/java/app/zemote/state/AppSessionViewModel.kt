@@ -56,10 +56,15 @@ class AppSessionViewModel : ViewModel() {
         workspaceMaps["${accountId}|${workspaceKey}"] = map
     }
 
-    /** 取（或创建）某账号某工作区某任务的 V4 会话仓库；仅在设备已连接后可用。 */
+    /**
+     * 取（或创建）某账号某工作区的 V4 会话仓库；仅在设备已连接后可用。
+     * 仓库按工作区共享（同一工作区只有一条 bridge）：多个会话的订阅都复用
+     * 这条桥。若按任务各开各的桥，桌面端"后者顶掉前者"会导致两条桥互相
+     * 踢，表现就是数据时有时无（对齐官方 Web 的单桥多订阅架构）。
+     */
     suspend fun conversationFor(accountId: String, workspaceKey: String, taskId: String?): ConversationV4Session? {
         val client = connections[accountId] ?: return null
-        val key = "$accountId|$workspaceKey|${taskId ?: "new"}"
+        val key = "$accountId|$workspaceKey"
 
         synchronized(conversationsLock) { conversations[key] }?.let { cached ->
             if (!cached.bridge.isDisposed) return cached
@@ -73,7 +78,7 @@ class AppSessionViewModel : ViewModel() {
                 synchronized(conversationsLock) { conversations.remove(key) }
             }
             val scopeParams = workspaceMaps["${accountId}|${workspaceKey}"]
-            val repo = ConversationV4Session.open(client, workspaceKey, taskId, scopeParams)
+            val repo = ConversationV4Session.open(client, workspaceKey, null, scopeParams)
             synchronized(conversationsLock) {
                 conversations[key] = repo
                 // 淘汰该设备最久未用、超出上限的仓库（dispose 会关掉 bridge 与订阅）
