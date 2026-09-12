@@ -12,8 +12,8 @@ android {
         applicationId = "app.zemote"
         minSdk = 28
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.5.3"
+        versionCode = 13
+        versionName = "1.5.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,12 +22,6 @@ android {
         // 只保留 arm64-v8a，现代手机全是 64 位，体积从 60MB 降到 ~20MB
         ndk {
             abiFilters += listOf("arm64-v8a")
-        }
-        // 16KB page size support for Android 15+
-        packaging {
-            jniLibs {
-                useLegacyPackaging = false
-            }
         }
     }
 

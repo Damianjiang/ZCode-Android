@@ -46,6 +46,55 @@ private data class ChangelogEntry(
 
 private val Changelogs = listOf(
     ChangelogEntry(
+        "v1.5.5", "2026-09-12",
+        listOf(
+            "🎉 对话页顶部显示会话标题（sessions-index 实时数据，桌面端重命名实时跟随），不再只显示「任务会话」",
+            "🎉 排队消息卡片对齐官方 web：AI 回复中发送的内容实时展示为队列卡片，支持立即发送、编辑、删除和自动发送开关",
+            "🎉 排队消息支持长按拖动排序：拖过相邻行即交换位置，松手按新顺序提交 reorderQueueItem，官方语义前后生效",
+            "🎨 执行过程汇总卡片：连续工具调用不再逐条刷原始 toolcall，聚合为「执行过程 N 步」卡片，一句话展示执行了什么命令、修改了哪个文件，点击展开看原始输出",
+            "🎨 AI 回复消息淡入显示；思考块展开/收起改为直切、去掉动画",
+            "🔖 新增自动跟随开关：消息区右下角箭头按钮，控制是否自动滚动到最新内容；流式输出增长时持续贴底，上翻阅读历史自动暂停跟随",
+            "🎨 输入框支持回车换行（发送走按钮）；上下文用量按钮更换为 M3 饼图图标",
+            "🎨 工作区加载动画改用 M3 标准 CircularProgressIndicator，替换自绘脉冲圆点",
+            "🐛 修复键盘弹出时输入框与输入法之间出现大片空白：窗口软输入模式固定为 adjustResize，消除系统平移与 imePadding 的双重避让",
+        ),
+    ),
+    ChangelogEntry(
+        "v1.5.4", "2026-09-12",
+        listOf(
+            "🎉 协议层对齐原版 Flutter 实现订阅帧 wire 封装：complete/fragment 分片重组 + subscriptionId/topic 路由，流式输出与实时更新从此真正生效（此前订阅帧全被丢弃，只能靠轮询兜底）",
+            "🎉 任务会话列表接入 sessions-index 实时订阅：会话标题、运行状态、新增会话实时推送，与 bootstrap 数据双源合并",
+            "🎉 附件上传打通：加号唤起系统选择器（图片/任意文件），官方 begin/chunk/commit 三段式分片上传（384KB + sha256 校验），随消息发送；消息内图片按 ref 拉取渲染、文件显示卡片",
+            "握手修正为 mobileApp + 协议能力版本 3.6.5（此前上报 App 版本号会导致 V4 能力协商降级）",
+            "命令信封补齐 CAS baseRevision，服务端报 stale 时按 revisionAtDecision 自动重试；模型切换新增思考档位兼容回退",
+            "seq 断层自动 resyncConversationV4 补快照 + 运行中静默 20s 看门狗；快照保留已加载的更早历史行，不再被窗口覆盖",
+            "首发消息随 createSession 的 firstInput 一起发送（官方语义，避免 send-before-subscribe 竞态）；模型菜单改由 prepareWorkspace configOptions 提供真实数据",
+            "移除发送后轮询刷新 hack：订阅推送已完整覆盖实时更新",
+        ),
+    ),
+    ChangelogEntry(
+        "v1.5.3", "2026-09-12",
+        listOf(
+            "🎉 流式输出支持：text_delta / reasoning_delta 增量帧实时渲染，边生成边显示",
+            "历史消息单次加载数量提升到 200 行",
+            "订阅帧解析优化，快照/增量帧分流处理",
+        ),
+    ),
+    ChangelogEntry(
+        "v1.5.2", "2026-09-12",
+        listOf(
+            "🐛 继续修复 16KB 页大小设备崩溃：native 库改用 legacy packaging 打包",
+        ),
+    ),
+    ChangelogEntry(
+        "v1.5.1", "2026-09-12",
+        listOf(
+            "🐛 修复 16KB 页大小（Android 15+）设备上的启动崩溃",
+            "恢复发送栏完整按钮（附件/权限/模型/思考/上下文/发送/停止）",
+            "minSdk 提升至 28",
+        ),
+    ),
+    ChangelogEntry(
         "v1.5.0", "2026-09-12",
         listOf(
             "🎉 对话协议全面打通：通过裸 socket 逆向定位根因——rpc-frame 必须携带裸 IPC 编码（去掉 13 字节帧头），桌面端此前静默丢弃我们的消息",
