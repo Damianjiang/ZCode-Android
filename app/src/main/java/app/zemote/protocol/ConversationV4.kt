@@ -29,13 +29,19 @@ data class TaskEntry(
     val running: Boolean get() = status == "running"
 }
 
-/** 从 bootstrap 响应解析任务列表 */
-suspend fun fetchTasksFromBootstrap(client: ZemoteClient): List<TaskEntry> {
+/** 从 bootstrap 响应解析任务列表（workspaceKey 非空时只保留该工作区的任务） */
+suspend fun fetchTasksFromBootstrap(client: ZemoteClient, workspaceKey: String? = null): List<TaskEntry> {
     val res = client.bootstrap()
     val tasks = res["tasks"] as? List<*> ?: return emptyList()
     return tasks.mapNotNull { t ->
         val m = t as? Map<*, *> ?: return@mapNotNull null
         val id = m["taskId"]?.toString() ?: return@mapNotNull null
+        // bootstrap 的 tasks 是全局的，必须按工作区过滤，否则混入其他目录的会话
+        if (workspaceKey != null) {
+            val identity = m["workspaceIdentity"]?.toString()
+            val path = m["workspacePath"]?.toString()
+            if (identity != workspaceKey && path != workspaceKey) return@mapNotNull null
+        }
         TaskEntry(
             taskId = id,
             title = m["title"]?.toString() ?: "未命名任务",
@@ -742,6 +748,8 @@ class ConversationV4Session private constructor(
             "uploadId" to uploadId,
             "sessionId" to sessionId,
         )
+        val startedAt = System.currentTimeMillis()
+        log("[v4] attachmentPut begin: $fileName ${bytes.size}B chunks=$totalChunks")
         val beginRes = call(
             "attachmentBeginV4",
             listOf(scope() + base + mapOf(
@@ -751,9 +759,11 @@ class ConversationV4Session private constructor(
                 "totalChunks" to totalChunks.toLong(),
                 "checksum" to checksum,
             )),
+            timeoutMs = 60_000,
         ) as? Map<*, *>
         if (beginRes?.get("state") == "committed") {
             // 服务端已有同校验和内容，秒传
+            log("[v4] attachmentPut committed(instant) $fileName")
             onProgress?.invoke(1f)
             return@withContext AttachmentUpload(beginRes["ref"]?.toString(), fileName, mime, bytes.size.toLong())
         }
@@ -762,20 +772,24 @@ class ConversationV4Session private constructor(
             val start = chunkIndex * chunkBytes
             val end = minOf(start + chunkBytes, bytes.size)
             val b64 = Base64.getEncoder().encodeToString(bytes.copyOfRange(start, end))
+            val chunkStart = System.currentTimeMillis()
             val chunkRes = call(
                 "attachmentChunkV4",
                 listOf(scope() + base + mapOf(
                     "chunkIndex" to chunkIndex.toLong(),
                     "dataBase64" to b64,
                 )),
+                timeoutMs = 60_000,
             ) as? Map<*, *>
             val next = (chunkRes?.get("nextChunkIndex") as? Number)?.toInt() ?: (chunkIndex + 1)
             if (next != chunkIndex + 1) throw IllegalStateException("fault.attachment.invalidServerProgress")
             chunkIndex = next
+            log("[v4] attachmentPut chunk $chunkIndex/$totalChunks +${System.currentTimeMillis() - chunkStart}ms total=${System.currentTimeMillis() - startedAt}ms")
             onProgress?.invoke(chunkIndex.toFloat() / totalChunks)
         }
         onProgress?.invoke(1f)
-        val commitRes = call("attachmentCommitV4", listOf(scope() + base)) as? Map<*, *>
+        val commitRes = call("attachmentCommitV4", listOf(scope() + base), timeoutMs = 60_000) as? Map<*, *>
+        log("[v4] attachmentPut committed $fileName in ${System.currentTimeMillis() - startedAt}ms ref=${commitRes?.get("ref")}")
         AttachmentUpload(commitRes?.get("ref")?.toString(), fileName, mime, bytes.size.toLong())
     }
 

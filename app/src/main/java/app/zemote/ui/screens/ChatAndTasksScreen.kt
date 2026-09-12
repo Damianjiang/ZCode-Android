@@ -133,7 +133,7 @@ fun TasksScreen(
             return@LaunchedEffect
         }
         var bootstrapTasks: List<app.zemote.protocol.TaskEntry> = emptyList()
-        runCatching { app.zemote.protocol.fetchTasksFromBootstrap(client) }
+        runCatching { app.zemote.protocol.fetchTasksFromBootstrap(client, workspaceKey) }
             .onSuccess {
                 bootstrapTasks = it
                 tasks = it
@@ -581,7 +581,9 @@ fun ChatScreen(
                                 val descriptors = mutableListOf<Map<String, Any?>>()
                                 files.forEachIndexed { i, f ->
                                     uploadStatus = "正在上传附件 ${i + 1}/${files.size}"
-                                    val up = repo0.attachmentPut(target, f.name, f.mime, f.bytes)
+                                    val up = repo0.attachmentPut(target, f.name, f.mime, f.bytes) { p ->
+                                        uploadStatus = "正在上传附件 ${i + 1}/${files.size} · ${(p * 100).toInt()}%"
+                                    }
                                     if (up.ref.isNullOrBlank()) throw IllegalStateException("附件上传失败：${f.name}")
                                     descriptors.add(mapOf(
                                         "ref" to up.ref,
