@@ -389,8 +389,15 @@ class ConversationV4Session private constructor(
                 _loading.value = true
                 runCatching { ensureHandshake() }
                     .onFailure { log("[v4] handshake failed: $it") }
-                // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开
-                sessionScope.launch { runCatching { prepareWorkspace() } }
+                // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开；
+                // 首次拿到空结果时自动重试一次（桌面端冷启动时可能返回空）
+                sessionScope.launch {
+                    runCatching { prepareWorkspace() }
+                    if (_modelOptions.value.isEmpty()) {
+                        delay(3000)
+                        runCatching { prepareWorkspace() }
+                    }
+                }
                 if (sessionId != null) {
                     runCatching { subscribeConversation(sessionId) }
                         .onFailure { log("[v4] subscribe failed: $it") }
@@ -398,6 +405,19 @@ class ConversationV4Session private constructor(
                         loadRows(sessionId, limit = 200)
                     } catch (e: Exception) {
                         log("[v4] loadRows failed: ${e.message}")
+                    }
+                    // 兜底：桌面端会话运行时可能未预热，首拉为空时自动补拉两次
+                    if (_rows.value.isEmpty()) {
+                        repeat(2) { attempt ->
+                            delay(if (attempt == 0) 2500L else 5000L)
+                            if (_rows.value.isNotEmpty()) return@repeat
+                            log("[v4] history empty, retry #$attempt")
+                            runCatching { resyncConversation() }
+                            try {
+                                loadRows(sessionId, limit = 200)
+                            } catch (_: Exception) {
+                            }
+                        }
                     }
                 }
             } finally {
@@ -736,10 +756,17 @@ class ConversationV4Session private constructor(
             put("limit", limit.toLong())
             if (beforeRowId != null) put("beforeRowId", beforeRowId)
         }
-        val res = call("conversationRowsRangeV4", listOf(args)) as? Map<*, *> ?: return@withContext _rows.value
+        val res = call("conversationRowsRangeV4", listOf(args)) as? Map<*, *> ?: run {
+            log("[v4] loadRows: unexpected response shape")
+            return@withContext _rows.value
+        }
         val container = (res["rows"] as? Map<*, *>) ?: res
-        val list = container["rows"] as? List<*> ?: return@withContext _rows.value
+        val list = container["rows"] as? List<*> ?: run {
+            log("[v4] loadRows: missing rows list")
+            return@withContext _rows.value
+        }
         mergeRows(list.mapNotNull(::parseRow))
+        log("[v4] loadRows got ${list.size} rows (total=${_rows.value.size})")
         _rows.value
     }
 

@@ -32,7 +32,6 @@ web-download/app-debug.apk
 /*.png
 !screenshots/*.png
 
-# 临时 API 推送脚本
 .api_push.py
 .api_push2.py
 
@@ -42,3 +41,6 @@ web-download/app-debug.apk
 # 临时协议实验脚本
 .proto_exp.py
 .proto_exp2.py
+
+# promo video working dir (local only)
+promo/
