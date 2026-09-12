@@ -72,7 +72,8 @@ class ChannelClient(
                     promiseHandlers.remove(id)?.complete(Pair(type, data))
                 }
                 RES_EVENT_FIRE -> {
-                    // EventFire: data 是 [eventFrame] 列表（ML Kit / web 统一格式）
+                    // EventFire: data 是 [eventFrame] 列表
+                    onLog?.invoke("[ipc] EVENT_FIRE id=$id data=${data?.toString()?.let { if (it.length > 500) it.substring(0, 500) + "..." else it }}")
                     eventHandlers[id]?.invoke(data)
                 }
             }

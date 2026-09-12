@@ -290,24 +290,30 @@ class ConversationV4Session private constructor(
     //    EventFire 的 value2 是参数列表（[frame]））──
     private fun applyConversationFrame(frame: Any?) {
         try {
+            client.onLog?.invoke("[v4] applyFrame type=${frame?.javaClass?.simpleName} size=${(frame as? List<*>)?.size}")
             // EventFire value2 是参数列表（[eventArg]），取第一个元素
             val raw = (frame as? List<*>)?.firstOrNull() ?: frame
             // 可能直接就是 frame map，也可能包在 payload 字段里
             val map = when {
                 raw is Map<*, *> -> raw
                 raw is List<*> && raw.isNotEmpty() && raw[0] is Map<*, *> -> raw[0] as Map<*, *>
-                else -> return
+                else -> {
+                    client.onLog?.invoke("[v4] skip: raw type=${raw?.javaClass?.simpleName}, value=${raw?.toString()?.let { if (it.length > 200) it.substring(0, 200) + "..." else it }}")
+                    return
+                }
             }
+            client.onLog?.invoke("[v4] map keys=${map.keys}")
             // 优先从 payload 取，兼容两种帧结构
             val payload = (map["payload"] as? Map<*, *>) ?: map
             val kind = payload["kind"] as? String
+            client.onLog?.invoke("[v4] kind=$kind ops=${(payload["ops"] as? List<*>)?.size} deltas=${(payload["deltas"] as? List<*>)?.size}")
             when (kind) {
                 "snapshot" -> applySnapshot(payload["snapshot"] ?: payload["state"])
                 "deltas" -> applyOps(payload["deltas"] as? List<*>)
                 else -> applyOps((payload["ops"] ?: map["ops"]) as? List<*>)
             }
         } catch (e: Exception) {
-            // 帧解析失败不阻塞主流程，静默忽略
+            client.onLog?.invoke("[v4] frame error: ${e.message}\n${e.stackTraceToString()}")
         }
     }
 
