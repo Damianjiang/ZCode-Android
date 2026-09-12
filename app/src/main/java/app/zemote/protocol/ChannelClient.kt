@@ -37,7 +37,7 @@ class ChannelClient(
     enum class Channel(val channelName: String) {
         FILE("file"), SYSTEM("system"), TERMINAL("terminal"), GIT("git"),
         GIT_CHECKPOINT("git-checkpoint"), SETTING("setting"), CREDENTIAL("credential"),
-        ZCODE_AGENT("zcode-agent"),
+        ZCODE_AGENT("zcode-agent"), ZCODE_SESSION("zcode-session"), ZCODE_TASK("zcode-task"),
     }
 
     private var lastRequestId = 0

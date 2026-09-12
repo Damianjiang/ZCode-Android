@@ -12,8 +12,8 @@ android {
         applicationId = "app.zemote"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.4.0"
+        versionCode = 7
+        versionName = "1.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -27,15 +27,16 @@ android {
 
     buildTypes {
         release {
+            // 分发版：R8 全量优化 + 资源收缩，用 debug 签名便于直接安装
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
         debug {
-            isMinifyEnabled = false
             isPseudoLocalesEnabled = false
         }
     }
