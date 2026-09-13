@@ -1349,7 +1349,7 @@ class ConversationV4Session private constructor(
             additions = (m["additions"] as? Number)?.toInt(),
             issuedAt = (m["issuedAt"] as? Number)?.toLong() ?: (m["createdAt"] as? Number)?.toLong(),
             attachments = attachments,
-            childSessionId = (m["childSessionId"] as? String)?.takeIf { it.isNotBlank() },
+            childSessionId = ((m["childSessionId"] as? Number)?.toString())?.takeIf { it.isNotBlank() },
             subagentType = (m["subagentType"] as? String)?.takeIf { it.isNotBlank() },
         )
     }
