@@ -195,6 +195,8 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
             }
             staleConversations.forEach { it.dispose() }
             conn?.dispose()
+            // 清理该设备的所有工作区 scope 缓存
+            workspaceMaps.keys.filter { it.startsWith("$accountId|") }.forEach { workspaceMaps.remove(it) }
             if (connections.isEmpty()) KeepAliveService.stop(getApplication())
         }
     }
@@ -210,6 +212,8 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
                 all
             }
             staleConversations.forEach { it.dispose() }
+            // 清理所有工作区 scope 缓存
+            workspaceMaps.clear()
             _uiState.value = SessionUiState()
         }
     }

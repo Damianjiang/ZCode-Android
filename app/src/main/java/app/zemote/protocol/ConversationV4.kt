@@ -31,13 +31,12 @@ data class TaskEntry(
 }
 
 /** 从 bootstrap 响应解析任务列表（workspaceKey 非空时只保留该工作区的任务） */
-suspend fun fetchTasksFromBootstrap(client: ZemoteClient, workspaceKey: String? = null): List<TaskEntry> {
+suspend fun fetchTasksFromBootstrap(client: ZemoteClient, workspaceKey: String? = null): List<TaskEntry> = withContext(Dispatchers.IO) {
     val res = client.bootstrap()
-    val tasks = res["tasks"] as? List<*> ?: return emptyList()
-    return tasks.mapNotNull { t ->
+    val tasks = res["tasks"] as? List<*> ?: emptyList<Any>()
+    tasks.mapNotNull { t ->
         val m = t as? Map<*, *> ?: return@mapNotNull null
         val id = m["taskId"]?.toString() ?: return@mapNotNull null
-        // bootstrap 的 tasks 是全局的，必须按工作区过滤，否则混入其他目录的会话
         if (workspaceKey != null) {
             val identity = m["workspaceIdentity"]?.toString()
             val path = m["workspacePath"]?.toString()
