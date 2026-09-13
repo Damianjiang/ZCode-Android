@@ -454,20 +454,21 @@ class ConversationV4Session private constructor(
             onEvent = ::handleConversationEvent,
             arg = scope(),
         )
+        // 注册后立即保存 listener，无论 subscribeConversationV4 成功或失败都能正确清理
+        convCancel = listener
         // 桌面端可能需要预热会话运行时，订阅要给足超时（官方 60s）
-        runCatching {
+        val ack = runCatching {
             call("subscribeConversationV4", listOf(scope() + mapOf("sessionId" to sessionId)), timeoutMs = 60_000)
         }.getOrNull()?.let { res ->
-            val ack = (res as? Map<*, *>)?.get("ack") as? Map<*, *>
-            convSubId = ack?.get("subscriptionId")?.toString()
-            ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
+            (res as? Map<*, *>)?.get("ack") as? Map<*, *>
         }
+        convSubId = ack?.get("subscriptionId")?.toString()
+        ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
         if (convSubId == null) {
             log("[v4] subscribeConversationV4: missing ack.subscriptionId")
-            listener()
+            convCancel?.invoke(); convCancel = null
             return
         }
-        convCancel = listener
         // 应答前到达的帧按序回放
         val staged = synchronized(stagedFrames) {
             val copy = stagedFrames.toList()
