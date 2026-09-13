@@ -287,6 +287,7 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    var rebuildKey by remember { mutableStateOf(0) }
 
     // 系统文件选择器：图片和任意文件均可选，选中即加入待发列表
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -311,7 +312,9 @@ fun ChatScreen(
     val deviceNotConnectedText = stringResource(R.string.device_not_connected)
     val deviceNotConnectedRetryText = stringResource(R.string.device_not_connected_retry)
 
-    LaunchedEffect(accountId, workspaceKey, sessionId) {
+    // 打开会话（含自愈）：设备未就绪重试 → 打开 → 若 4 秒后历史/模型仍为空，
+    // 说明这条桥在服务端已失效（如被抢占后遗留），销毁重建整条通道再试一次
+    LaunchedEffect(accountId, workspaceKey, sessionId, rebuildKey) {
         if (accountId == null) {
             error = deviceNotConnectedText
             return@LaunchedEffect
@@ -324,21 +327,35 @@ fun ChatScreen(
             if (opened != null) break
             delay(1500)
         }
-        if (opened != null) repo = opened
-        else error = deviceNotConnectedRetryText
+        if (opened == null) {
+            error = deviceNotConnectedRetryText
+            return@LaunchedEffect
+        }
+        repo = opened
+        opened.openConversation(sessionId)
+
+        if (sessionId != null) {
+            delay(4000)
+            val nothingLoaded = opened.rows.value.isEmpty() || opened.modelOptions.value.isEmpty()
+            if (nothingLoaded) {
+                session.closeConversation(accountId, workspaceKey)
+                repo = null
+                opened = runCatching { session.conversationFor(accountId, workspaceKey, sessionId) }
+                    .getOrNull()
+                if (opened != null) {
+                    repo = opened
+                    opened.openConversation(sessionId)
+                }
+            }
+        }
+
+        delay(5000)
+        historyUnavailable = repo?.rows?.value.isNullOrEmpty()
     }
 
     // 会话标题数据源：sessions-index（幂等，重复调用自动跳过）
     LaunchedEffect(repo) {
         runCatching { repo?.openSessionsIndex() }
-    }
-
-    LaunchedEffect(repo, sessionId) {
-        repo?.openConversation(sessionId)
-        // 历史行 8s 仍未到达 → 该会话暂无可见消息
-        kotlinx.coroutines.delay(5000)
-        if (repo?.rows?.value.isNullOrEmpty()) historyUnavailable = true
-        else historyUnavailable = false
     }
 
     val rows by (repo?.rows?.collectAsState() ?: remember { mutableStateOf(emptyList<ConvRow>()) })
