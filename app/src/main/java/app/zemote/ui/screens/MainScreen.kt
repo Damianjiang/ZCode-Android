@@ -55,6 +55,7 @@ fun MainScreen(
     onNavigateToShell: (Account) -> Unit,
     onOpenPersonalize: () -> Unit,
     onOpenChangelog: () -> Unit,
+    onScan: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -90,7 +91,7 @@ fun MainScreen(
         ) { current ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 when (current) {
-                    0 -> AccountsScreen(store = store, session = session, onNavigateToShell = onNavigateToShell)
+                    0 -> AccountsScreen(store = store, session = session, onNavigateToShell = onNavigateToShell, onScan = onScan)
                     else -> SettingsScreen(
                         onOpenPersonalize = onOpenPersonalize,
                         onOpenChangelog = onOpenChangelog,

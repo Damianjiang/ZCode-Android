@@ -49,6 +49,13 @@ private data class ChangelogEntry(
 
 private val Changelogs = listOf(
     ChangelogEntry(
+        "v1.5.9", "2026-09-13",
+        listOf(
+            "新增扫码配对：对准桌面端二维码即可添加设备，本地解码不依赖 Google 服务",
+            "新增前台保活服务：连接期间常驻通知，降低后台被杀导致的掉线",
+        ),
+    ),
+    ChangelogEntry(
         "v1.5.8", "2026-09-13",
         listOf(
             "修复同一工作区多条会话桥互相踢的问题：仓库按工作区共享，一条桥复用全部会话订阅（对齐官方架构）",

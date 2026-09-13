@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
     private val dataStore by lazy { application.dataStore }
     private val themeManager by lazy { ThemeManager(dataStore) }
     private val accountStore by lazy { AccountStore(dataStore = dataStore) }
-    private val sessionViewModel by lazy { AppSessionViewModel() }
+    private val sessionViewModel by lazy { AppSessionViewModel(application) }
 
     override fun attachBaseContext(newBase: Context) {
         // 语言设置：默认跟随系统，可在设置中手动指定中文/英文

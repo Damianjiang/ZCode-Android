@@ -117,7 +117,6 @@
     <string name="add_device">Add device</string>
     <string name="devices">Devices</string>
     <string name="connect_your_desktop">Connect your desktop ZCode</string>
-    <string name="qr_hint">Camera dependency not included; paste the remote control URL to add a device</string>
     <string name="device_added">Device added</string>
     <string name="no_devices_yet">No devices yet</string>
     <string name="no_devices_hint">Paste the remote control link from desktop ZCode,\nor scan the pairing QR code, and connect from anywhere.</string>
@@ -177,4 +176,10 @@
     <string name="brand_rose">Rose</string>
     <string name="brand_warm_orange">Warm orange</string>
     <string name="status_connected">Connected</string>
+    <string name="qr_align">Point the camera at the pairing QR code on your desktop</string>
+    <string name="qr_permission_denied">Camera permission denied — scanning unavailable</string>
+    <string name="qr_retry">Grant camera access and retry</string>
+    <string name="keepalive_channel">Keep-alive</string>
+    <string name="keepalive_title">Connected to “%1$s”</string>
+    <string name="keepalive_text">Keeping the connection to your desktop alive</string>
 </resources>

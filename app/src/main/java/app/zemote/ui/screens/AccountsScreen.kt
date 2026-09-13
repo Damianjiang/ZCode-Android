@@ -93,8 +93,10 @@ fun AccountsScreen(
     store: AccountStore,
     session: AppSessionViewModel,
     onNavigateToShell: (Account) -> Unit,
+    onScan: () -> Unit = {},
 ) {
     var showAddSheet by remember { mutableStateOf(false) }
+    var prefilledUrl by remember { mutableStateOf<String?>(null) }
     var renameTarget by remember { mutableStateOf<Account?>(null) }
     val accounts by store.accounts.collectAsState()
     val uiState by session.uiState.collectAsState()
@@ -102,7 +104,14 @@ fun AccountsScreen(
     val ctx = LocalContext.current
     val snackHost = remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) { store.load() }
+    LaunchedEffect(Unit) {
+        store.load()
+        // 扫码返回：预填配对 URL 并打开添加面板
+        session.consumeScannedPairingUrl()?.let { url ->
+            prefilledUrl = url
+            showAddSheet = true
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -192,15 +201,13 @@ fun AccountsScreen(
         )
     }
 
-    val qrHintText = stringResource(R.string.qr_hint)
     val deviceAddedText = stringResource(R.string.device_added)
 
     if (showAddSheet) {
         AddDeviceBottomSheet(
+            initialUrl = prefilledUrl,
             onDismiss = { showAddSheet = false },
-            onScan = {
-                scope.launch { snackHost.showSnackbar(qrHintText) }
-            },
+            onScan = onScan,
             onUrlSubmit = { url, label ->
                 showAddSheet = false
                 if (url.trim().isEmpty()) return@AddDeviceBottomSheet
@@ -444,11 +451,12 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddDeviceBottomSheet(
+    initialUrl: String? = null,
     onDismiss: () -> Unit,
     onScan: () -> Unit,
     onUrlSubmit: (String, String) -> Unit,
 ) {
-    var url by remember { mutableStateOf("") }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl ?: "") }
     var label by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
 

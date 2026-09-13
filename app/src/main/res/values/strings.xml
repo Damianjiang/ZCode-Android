@@ -117,7 +117,6 @@
     <string name="add_device">添加设备</string>
     <string name="devices">设备</string>
     <string name="connect_your_desktop">连接你的桌面 ZCode</string>
-    <string name="qr_hint">扫码功能需相机依赖，可手动粘贴远程控制链接添加设备</string>
     <string name="device_added">设备已添加</string>
     <string name="no_devices_yet">还没有设备</string>
     <string name="no_devices_hint">把桌面 ZCode 的远程控制链接粘贴进来，\n或扫描配对二维码，随时随地去连。</string>
@@ -177,4 +176,10 @@
     <string name="brand_rose">蔷薇</string>
     <string name="brand_warm_orange">暖橙</string>
     <string name="status_connected">已连接</string>
+    <string name="qr_align">对准桌面端的配对二维码</string>
+    <string name="qr_permission_denied">未授权相机，无法扫码配对</string>
+    <string name="qr_retry">授权相机并重试</string>
+    <string name="keepalive_channel">连接保活</string>
+    <string name="keepalive_title">已连接「%1$s」</string>
+    <string name="keepalive_text">会话保活中，保持与桌面端的连接</string>
 </resources>

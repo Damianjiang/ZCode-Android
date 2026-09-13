@@ -1,7 +1,9 @@
 package app.zemote.state
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.zemote.service.KeepAliveService
 import app.zemote.protocol.ConversationV4Session
 import app.zemote.protocol.ZemoteClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +33,17 @@ data class SessionUiState(
  * 多设备连接管理。所有状态收敛到 [uiState] 这个 StateFlow，
  * UI 只观察它即可随连接变化自动重组（旧实现是普通字段，UI 不刷新，已废弃）。
  */
-class AppSessionViewModel : ViewModel() {
+class AppSessionViewModel(application: Application) : AndroidViewModel(application) {
+
+    /** 扫码页回传的配对 URL，添加设备页消费（一次性） */
+    var scannedPairingUrl: String? = null
+
+    fun consumeScannedPairingUrl(): String? {
+        val v = scannedPairingUrl
+        scannedPairingUrl = null
+        return v
+    }
+
 
     private val connections = ConcurrentHashMap<String, ZemoteClient>()
     private val connectMutex = Mutex()
@@ -147,6 +159,8 @@ class AppSessionViewModel : ViewModel() {
                     currentAccounts[account.id] = account
                     setStatus(account.id, DeviceStatus(ConnectionState.CONNECTED))
                     _uiState.update { it.copy(activeId = account.id) }
+                    // 前台保活：连接期间常驻通知，防止系统回收进程导致掉线
+                    KeepAliveService.start(getApplication(), account.label)
                 } catch (e: Exception) {
                     client.dispose()
                     setStatus(account.id, DeviceStatus(ConnectionState.ERROR, e.message ?: "连接失败"))
@@ -177,6 +191,7 @@ class AppSessionViewModel : ViewModel() {
             }
             staleConversations.forEach { it.dispose() }
             conn?.dispose()
+            if (connections.isEmpty()) KeepAliveService.stop(getApplication())
         }
     }
 
@@ -184,6 +199,7 @@ class AppSessionViewModel : ViewModel() {
         viewModelScope.launch {
             connections.values.forEach { it.dispose() }
             connections.clear()
+            KeepAliveService.stop(getApplication())
             val staleConversations = synchronized(conversationsLock) {
                 val all = conversations.values.toList()
                 conversations.clear()

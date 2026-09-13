@@ -41,6 +41,7 @@ sealed class Screen(val route: String) {
     object Main : Screen("main")
     object Personalize : Screen("personalize")
     object Changelog : Screen("changelog")
+    object QrScan : Screen("qr_scan")
     object MainShell : Screen("main_shell/{accountId}") {
         fun createRoute(accountId: String) = "main_shell/$accountId"
     }
@@ -77,6 +78,16 @@ fun ZemoteNavHost(
                 },
                 onOpenPersonalize = { navController.navigate(Screen.Personalize.route) },
                 onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
+                onScan = { navController.navigate(Screen.QrScan.route) },
+            )
+        }
+        composable(Screen.QrScan.route) {
+            app.zemote.ui.screens.QrScanScreen(
+                onBack = { navController.popBackStack() },
+                onResult = { url ->
+                    sessionViewModel.scannedPairingUrl = url
+                    navController.popBackStack()
+                },
             )
         }
         composable(Screen.Personalize.route) {
