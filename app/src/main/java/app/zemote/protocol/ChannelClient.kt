@@ -141,6 +141,13 @@ class ChannelClient(
         encodeValue(writer, args)
         sendBody(writer.toByteArray())
         ZemoteLogger.info("ipc", "→ ${channel.channelName}.$method id=$id")
+        // 在 await 前再次检查，防止 scope 在此窗口期内被取消
+        // （LeftCompositionCancellationException 不是 CancellationException 子类，
+        //  不会被上一个 catch 捕获，会走到 Exception catch 抛出 TimeoutException）
+        if (!isActiveCheck()) {
+            promiseHandlers.remove(id)
+            return null
+        }
         val (resType, data) = try {
             kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -149,6 +156,11 @@ class ChannelClient(
             throw e
         } catch (e: Exception) {
             promiseHandlers.remove(id)
+            // LeftCompositionCancellationException 是 internal 类，通过消息匹配识别
+            if (e.message?.contains("composition") == true) {
+                // Compose 导航离开，静默处理
+                return null
+            }
             onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
             throw TimeoutException("${channel.channelName}.$method timed out")
         }
