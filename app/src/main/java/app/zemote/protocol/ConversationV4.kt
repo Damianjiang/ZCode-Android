@@ -351,7 +351,7 @@ class ConversationV4Session private constructor(
     private suspend fun ensureHandshake() {
         if (handshakeDone) return
         if (!sessionScope.isActive) return
-        val hello = call("helloConversationV4", emptyList()) as? Map<*, *>
+        val hello = call("helloConversationV4", emptyList(), isActiveCheck = { sessionScope.isActive }) as? Map<*, *>
         if (!sessionScope.isActive) return  // scope cancelled between calls → bail early
         connectionId = hello?.get("connectionId")?.toString()
         val initResult = call(
@@ -364,6 +364,7 @@ class ConversationV4Session private constructor(
                 "appVersion" to PROTOCOL_APP_VERSION,
                 "capabilities" to mapOf("workspaceHookReviewUi" to true),
             )),
+            isActiveCheck = { sessionScope.isActive },
         )
         if (!sessionScope.isActive) return  // scope cancelled between calls → bail early
         handshakeDone = true
@@ -464,7 +465,7 @@ class ConversationV4Session private constructor(
         convCancel = listener
         // 桌面端可能需要预热会话运行时，订阅要给足超时（官方 60s）
         val callResult = runCatching {
-            call("subscribeConversationV4", listOf(scope() + mapOf("sessionId" to sessionId)), timeoutMs = 60_000)
+            call("subscribeConversationV4", listOf(scope() + mapOf("sessionId" to sessionId)), timeoutMs = 60_000, isActiveCheck = { sessionScope.isActive })
         }.getOrNull()
         // scope 已取消（页面离开等）→ 静默退出，不打印噪声日志
         if (callResult == null) { convCancel?.invoke(); convCancel = null; return }
@@ -499,7 +500,7 @@ class ConversationV4Session private constructor(
             // 使用 sessionScope 而非裸 CoroutineScope，确保 dispose 时能随会话一起取消
             sessionScope.launch {
                 runCatching {
-                    call("unsubscribeConversationV4", listOf(scope() + mapOf("subscriptionId" to id)))
+                    call("unsubscribeConversationV4", listOf(scope() + mapOf("subscriptionId" to id)), isActiveCheck = { sessionScope.isActive })
                 }
             }
         }
@@ -762,6 +763,7 @@ class ConversationV4Session private constructor(
                         "forceSnapshot" to true,
                         "base" to mapOf("logEpoch" to convLogEpoch, "seq" to convSeq),
                     )),
+                    isActiveCheck = { sessionScope.isActive },
                 )
             } catch (e: Exception) {
                 // 必须区分普通异常和协程取消（bridge swap 等导致）；两种情况都需要清除 resyncing
@@ -782,7 +784,7 @@ class ConversationV4Session private constructor(
             put("limit", limit.toLong())
             if (beforeRowId != null) put("beforeRowId", beforeRowId)
         }
-        val res = call("conversationRowsRangeV4", listOf(args)) as? Map<*, *> ?: run {
+        val res = call("conversationRowsRangeV4", listOf(args), isActiveCheck = { sessionScope.isActive }) as? Map<*, *> ?: run {
             log("[v4] loadRows: unexpected response shape")
             return@withContext _rows.value
         }
@@ -1023,7 +1025,7 @@ class ConversationV4Session private constructor(
             put("payload", payload)
             put("issuedAt", System.currentTimeMillis())
         }
-        var res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to envelope)), timeoutMs)
+        var res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to envelope)), timeoutMs, isActiveCheck = { sessionScope.isActive })
         val map = res as? Map<*, *>
         if (sessionId != null && map?.get("status") == "stale") {
             val serverRevision = (map["revisionAtDecision"] as? Number)?.toLong() ?: 0L
@@ -1036,7 +1038,7 @@ class ConversationV4Session private constructor(
                 put("baseRevision", serverRevision)
                 put("issuedAt", System.currentTimeMillis())
             }
-            res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to retry)), timeoutMs)
+            res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to retry)), timeoutMs, isActiveCheck = { sessionScope.isActive })
         }
         // 记录 ack 携带的 revision；已接受的命令使 revision +1，作为下次 CAS 基准
         val ack = res as? Map<*, *>
@@ -1113,7 +1115,7 @@ class ConversationV4Session private constructor(
         if (!refresh && _modelOptions.value.isNotEmpty()) return@withContext true
         if (!sessionScope.isActive) return@withContext false
         val res = runCatching {
-            channels.call(ChannelClient.Channel.ZCODE_TASK, "prepareWorkspace", listOf(scope()))
+            channels.call(ChannelClient.Channel.ZCODE_TASK, "prepareWorkspace", listOf(scope()), isActiveCheck = { sessionScope.isActive })
         }.getOrNull() as? Map<*, *> ?: return@withContext false
         val options = res["configOptions"] as? List<*> ?: return@withContext false
         log("[v4] prepareWorkspace: got ${options.size} configOptions entries")
@@ -1263,6 +1265,7 @@ class ConversationV4Session private constructor(
                         "runtimePolicy" to "existing-only",
                         "base" to mapOf("logEpoch" to siLogEpoch, "seq" to siSeq),
                     )),
+                    isActiveCheck = { sessionScope.isActive },
                 )
             } catch (e: Exception) {
                 log("[v4-si] resync failed: ${e.message}")
@@ -1398,8 +1401,13 @@ class ConversationV4Session private constructor(
 
     private fun mergeRow(row: ConvRow) = mergeRows(listOf(row))
 
-    private suspend fun call(method: String, args: List<Any?>, timeoutMs: Long = 30_000): Any? =
-        channels.call(ChannelClient.Channel.ZCODE_AGENT, method, args, timeoutMs)
+    private suspend fun call(
+        method: String,
+        args: List<Any?>,
+        timeoutMs: Long = 30_000,
+        isActiveCheck: () -> Boolean = { sessionScope.isActive },
+    ): Any? =
+        channels.call(ChannelClient.Channel.ZCODE_AGENT, method, args, timeoutMs, isActiveCheck)
 
     fun dispose() {
         unsubscribeConversation()

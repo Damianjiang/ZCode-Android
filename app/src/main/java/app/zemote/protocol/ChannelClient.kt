@@ -107,9 +107,15 @@ class ChannelClient(
      * transport 内完成）。发送前必须等桌面端的 Initialize 帧：先于它发出的
      * 请求会被静默丢弃（对齐官方 Pne 的 ready 门控）。
      */
-    private suspend fun awaitReady(timeoutMs: Long = 30_000L) {
+    private suspend fun awaitReady(
+        timeoutMs: Long = 30_000L,
+        isActiveCheck: () -> Boolean = { scope.isActive },
+    ) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!initialized) {
+            // 必须在 delay 之前检查，否则 delay(50) 会抛出 CancellationException
+            // isActiveCheck 默认检查 ChannelClient 自己的 scope，调用方可传入 sessionScope.isActive
+            if (!isActiveCheck()) return
             if (!scope.isActive) return
             if (System.currentTimeMillis() >= deadline) {
                 throw TimeoutException("channel init timeout (no Initialize frame from desktop)")
@@ -125,7 +131,7 @@ class ChannelClient(
         timeoutMs: Long = 30_000L,
         isActiveCheck: () -> Boolean = { scope.isActive },
     ): Any? {
-        awaitReady(30_000L)
+        awaitReady(30_000L, isActiveCheck)
         if (!isActiveCheck()) return null
         val id = lastRequestId++
         val completer = CompletableDeferred<Pair<Int, Any?>>()
