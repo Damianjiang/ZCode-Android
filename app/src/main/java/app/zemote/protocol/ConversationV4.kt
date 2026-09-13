@@ -316,6 +316,8 @@ class ConversationV4Session private constructor(
             convSeq = 0
             siSeq = 0
             snapshotSeen = false
+            resyncing = false
+            lastFrameAt = System.currentTimeMillis()
             _pendingPatch = null
             synchronized(stagedFrames) { stagedFrames.clear() }
             synchronized(siStaged) { siStaged.clear() }
