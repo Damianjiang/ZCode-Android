@@ -352,8 +352,9 @@ class ConversationV4Session private constructor(
         if (handshakeDone) return
         if (!sessionScope.isActive) return
         val hello = call("helloConversationV4", emptyList()) as? Map<*, *>
+        if (!sessionScope.isActive) return  // scope cancelled between calls → bail early
         connectionId = hello?.get("connectionId")?.toString()
-        call(
+        val initResult = call(
             "initializeConversationV4",
             listOf(mapOf<String, Any>(
                 "kind" to "clientHello",
@@ -364,6 +365,7 @@ class ConversationV4Session private constructor(
                 "capabilities" to mapOf("workspaceHookReviewUi" to true),
             )),
         )
+        if (!sessionScope.isActive) return  // scope cancelled between calls → bail early
         handshakeDone = true
     }
 
@@ -748,7 +750,7 @@ class ConversationV4Session private constructor(
 
     private fun resyncConversation() {
         val id = convSubId
-        if (id == null || resyncing) return
+        if (id == null || resyncing || !sessionScope.isActive) return
         resyncing = true
         log("[v4] resync (gap) seq=$convSeq logEpoch=$convLogEpoch")
         sessionScope.launch {
@@ -774,6 +776,7 @@ class ConversationV4Session private constructor(
 
     /** 历史行窗口（分页：beforeRowId 传当前最早一行的 rowId） */
     suspend fun loadRows(sessionId: String, limit: Int = 200, beforeRowId: String? = null): List<ConvRow> = withContext(Dispatchers.IO) {
+        if (!sessionScope.isActive) return@withContext _rows.value
         val args = scope() + buildMap<String, Any> {
             put("sessionId", sessionId)
             put("limit", limit.toLong())
@@ -1007,6 +1010,7 @@ class ConversationV4Session private constructor(
     ): Any? {
         runCatching { ensureHandshake() }
             .onFailure { log("[v4] handshake failed: $it") }
+        if (!sessionScope.isActive) return null
         val baseRevision = if (sessionId != null) {
             maxOf(revision, ackedRevisions[sessionId] ?: 0L)
         } else 0L
@@ -1107,6 +1111,7 @@ class ConversationV4Session private constructor(
      */
     suspend fun prepareWorkspace(refresh: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         if (!refresh && _modelOptions.value.isNotEmpty()) return@withContext true
+        if (!sessionScope.isActive) return@withContext false
         val res = runCatching {
             channels.call(ChannelClient.Channel.ZCODE_TASK, "prepareWorkspace", listOf(scope()))
         }.getOrNull() as? Map<*, *> ?: return@withContext false
@@ -1247,7 +1252,7 @@ class ConversationV4Session private constructor(
 
     private fun resyncSessionsIndex() {
         val id = siSubId
-        if (id == null || siResyncing) return
+        if (id == null || siResyncing || !sessionScope.isActive) return
         siResyncing = true
         sessionScope.launch {
             try {

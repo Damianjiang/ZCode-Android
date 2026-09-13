@@ -123,9 +123,10 @@ class ChannelClient(
         method: String,
         args: List<Any?> = emptyList(),
         timeoutMs: Long = 30_000L,
+        isActiveCheck: () -> Boolean = { scope.isActive },
     ): Any? {
         awaitReady(30_000L)
-        if (!scope.isActive) return null // scope was cancelled (e.g. bridge swap), don't throw
+        if (!isActiveCheck()) return null
         val id = lastRequestId++
         val completer = CompletableDeferred<Pair<Int, Any?>>()
         promiseHandlers[id] = completer
