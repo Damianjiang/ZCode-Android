@@ -455,18 +455,19 @@ class ConversationV4Session private constructor(
             arg = scope(),
         )
         // 桌面端可能需要预热会话运行时，订阅要给足超时（官方 60s）
-        val res = runCatching {
+        runCatching {
             call("subscribeConversationV4", listOf(scope() + mapOf("sessionId" to sessionId)), timeoutMs = 60_000)
-        }.getOrNull()
-        convCancel = listener
-        val ack = (res as? Map<*, *>)?.get("ack") as? Map<*, *>
-        convSubId = ack?.get("subscriptionId")?.toString()
-        ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
+        }.getOrNull()?.let { res ->
+            val ack = (res as? Map<*, *>)?.get("ack") as? Map<*, *>
+            convSubId = ack?.get("subscriptionId")?.toString()
+            ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
+        }
         if (convSubId == null) {
             log("[v4] subscribeConversationV4: missing ack.subscriptionId")
-            convCancel?.invoke(); convCancel = null
+            listener()
             return
         }
+        convCancel = listener
         // 应答前到达的帧按序回放
         val staged = synchronized(stagedFrames) {
             val copy = stagedFrames.toList()
@@ -1402,6 +1403,7 @@ class ConversationV4Session private constructor(
                 }
             }
         }
+        resyncing = false
         sessionScope.cancel()
         bridge.dispose()
     }
