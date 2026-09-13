@@ -893,6 +893,7 @@ class ConversationV4Session private constructor(
                 "checksum" to checksum,
             )),
             timeoutMs = 60_000,
+            isActiveCheck = { sessionScope.isActive },
         ) as? Map<*, *>
         if (beginRes?.get("state") == "committed") {
             // 服务端已有同校验和内容，秒传
@@ -913,6 +914,7 @@ class ConversationV4Session private constructor(
                     "dataBase64" to b64,
                 )),
                 timeoutMs = 60_000,
+                isActiveCheck = { sessionScope.isActive },
             ) as? Map<*, *>
             val next = (chunkRes?.get("nextChunkIndex") as? Number)?.toInt() ?: (chunkIndex + 1)
             if (next != chunkIndex + 1) throw IllegalStateException("fault.attachment.invalidServerProgress")
@@ -921,7 +923,7 @@ class ConversationV4Session private constructor(
             onProgress?.invoke(chunkIndex.toFloat() / totalChunks)
         }
         onProgress?.invoke(1f)
-        val commitRes = call("attachmentCommitV4", listOf(scope() + base), timeoutMs = 60_000) as? Map<*, *>
+        val commitRes = call("attachmentCommitV4", listOf(scope() + base), timeoutMs = 60_000, isActiveCheck = { sessionScope.isActive }) as? Map<*, *>
         log("[v4] attachmentPut committed $fileName in ${System.currentTimeMillis() - startedAt}ms ref=${commitRes?.get("ref")}")
         AttachmentUpload(commitRes?.get("ref")?.toString(), fileName, mime, bytes.size.toLong())
     }
@@ -943,6 +945,7 @@ class ConversationV4Session private constructor(
                     "offset" to offset,
                     "limit" to chunkBytes.toLong(),
                 )),
+                isActiveCheck = { sessionScope.isActive },
             ) as? Map<*, *> ?: break
             if (mediaType == null) mediaType = res["mediaType"]?.toString()
             val data = res["dataBase64"]?.toString()
@@ -1170,6 +1173,7 @@ class ConversationV4Session private constructor(
                 "subscribeSessionsIndexV4",
                 listOf(scope() + mapOf("runtimePolicy" to "existing-only")),
                 timeoutMs = 60_000,
+                isActiveCheck = { sessionScope.isActive },
             )
         }.getOrNull()
         // scope 已取消 → 静默退出
@@ -1423,6 +1427,7 @@ class ConversationV4Session private constructor(
                         ChannelClient.Channel.ZCODE_AGENT,
                         "unsubscribeSessionsIndexV4",
                         listOf(scope() + mapOf("subscriptionId" to id, "runtimePolicy" to "existing-only")),
+                        isActiveCheck = { sessionScope.isActive },
                     )
                 }
             }
