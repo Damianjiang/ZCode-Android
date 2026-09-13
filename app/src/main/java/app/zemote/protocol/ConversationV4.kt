@@ -349,6 +349,7 @@ class ConversationV4Session private constructor(
                 "clientId" to CLIENT_ID,
                 "clientKind" to "mobileApp",
                 "appVersion" to PROTOCOL_APP_VERSION,
+                "capabilities" to mapOf("workspaceHookReviewUi" to true),
             )),
         )
         handshakeDone = true
