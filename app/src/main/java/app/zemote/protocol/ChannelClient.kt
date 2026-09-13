@@ -44,6 +44,14 @@ class ChannelClient(
     }
 
     private var lastRequestId = 0
+
+    /**
+     * 桌面端通道就绪信号：Initialize([200]) 帧到达后完成。
+     * 所有 call / 事件注册必须等它（对齐官方 Pne 行为）——
+     * 先于 Initialize 发送的请求会被桌面端静默丢弃。
+     */
+    private val ready = CompletableDeferred<Unit>()
+
     private val promiseHandlers = ConcurrentHashMap<Int, CompletableDeferred<Pair<Int, Any?>>>()
     private val eventHandlers = ConcurrentHashMap<Int, (Any?) -> Unit>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -60,8 +68,8 @@ class ChannelClient(
             if (header.isEmpty() || header[0] !is Number) return
             val type = (header[0] as Number).toInt()
             if (type == RES_INITIALIZE) {
-                // 桌面端在收到首条消息后发来 Initialize([200]+null)，无需应答
-                onLog?.invoke("[ipc] host initialize")
+                onLog?.invoke("[ipc] initialized")
+                if (!ready.isCompleted) ready.complete(Unit)
                 return
             }
             if (header.size < 2 || header[1] !is Number) return
@@ -84,15 +92,24 @@ class ChannelClient(
     /**
      * Sends a request over [channel].[method] with [args] and returns the result.
      * Encodes the raw value-list and sends via [sendBody]（rpc-frame 化在
-     * transport 内完成）。不等待握手：桌面端的 Initialize 是收到首条消息后才
-     * 下发的，先等后发会死锁。
+     * transport 内完成）。发送前必须等桌面端的 Initialize 帧：先于它发出的
+     * 请求会被静默丢弃（对齐官方 Pne 的 ready 门控）。
      */
+    private suspend fun awaitReady(timeoutMs: Long = 30_000L) {
+        try {
+            kotlinx.coroutines.withTimeout(timeoutMs) { ready.await() }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            throw TimeoutException("channel init timeout (no Initialize frame from desktop)")
+        }
+    }
+
     suspend fun call(
         channel: Channel,
         method: String,
         args: List<Any?> = emptyList(),
         timeoutMs: Long = 30_000L,
     ): Any? {
+        awaitReady(30_000L)
         val id = lastRequestId++
         val completer = CompletableDeferred<Pair<Int, Any?>>()
         promiseHandlers[id] = completer
@@ -130,9 +147,16 @@ class ChannelClient(
     ): () -> Unit {
         val id = lastRequestId++
         var sent = false
+        var cancelled = false
         eventHandlers[id] = onEvent
-        fun send() {
-            if (sent) return
+        // 等桌面端 Initialize 到达后再发注册请求（先发的注册会被静默丢弃）
+        scope.launch {
+            try {
+                awaitReady(30_000L)
+            } catch (_: Exception) {
+                return@launch
+            }
+            if (cancelled || sent) return@launch
             sent = true
             onLog?.invoke("[ipc] listen ${channel.channelName}.$event id=$id")
             val writer = ValueWriter()
@@ -140,8 +164,8 @@ class ChannelClient(
             encodeValue(writer, arg)
             sendBody(writer.toByteArray())
         }
-        send()
         return {
+            cancelled = true
             eventHandlers.remove(id)
             if (sent) {
                 val writer = ValueWriter()
