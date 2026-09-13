@@ -285,6 +285,11 @@ class ZemoteClient(
      * Retries bridge recovery until it succeeds, so a degraded bridge never
      * strands commands ("can't send after reconnect").
      */
+    /**
+     * Bridge 恢复：对齐官方流程 — 直接走 workspace-bridge-open 重建桥接。
+     * 官方源码（P=async(e,t)=>...）不区分 reconnect 和 reopen，
+     * 统一通过 workspace-bridge-open + recoveryId 重建整条通道。
+     */
     private suspend fun recoverActiveBridges() {
         onLog?.invoke("[bridge] recovering ${activeBridges.size} bridge(s)")
         for (session in activeBridges.values.toList()) {
@@ -292,54 +297,23 @@ class ZemoteClient(
             session.isRecovering = true
             relayScope.launch {
                 try {
-                    for (attempt in 1..15) {
-                        if (session.isDisposed) return@launch
-                        val workspaceKey = session.workspaceKey
-                        if (workspaceKey != null) {
-                            try {
-                                val res = reconnectWorkspace(workspaceKey)
-                                if (res["success"] == true) {
-                                    @Suppress("UNCHECKED_CAST")
-                                    val bridge = res["bridge"] as? Map<String, Any>
-                                    if (!bridge.isNullOrEmpty()) {
-                                        session.swapBridge(bridge, relay)
-                                        onLog?.invoke("[bridge] reconnected $workspaceKey")
-                                        session.degraded.value = null
-                                        // 重建握手/订阅由 ConversationV4Session.init 内的 bridge.recovered 流驱动，
-                                        // 此处只需清除 degraded 状态；若会话协程仍存活则会触发重建，
-                                        // 若已取消则由下次 openConversation 自然完成。
-                                        session.isRecovering = false
-                                        return@launch
-                                    } else {
-                                        // reconnectWorkspace 成功但无 bridge 数据 → 桌面端不认这个 reconnect 路径，
-                                        // 立即跳出循环走 reopen，避免无限重试
-                                        onLog?.invoke("[bridge] reconnected but no bridge data, switching to reopen")
-                                        break
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                onLog?.invoke("[bridge] reconnect-request failed: $e")
-                            }
-                            if (session.isDisposed) return@launch
-                            onLog?.invoke("[bridge] recovery attempt $attempt failed, retrying")
-                            delay(3000)
-                        } else {
-                            session.degraded.value = null
-                            session.isRecovering = false
-                            return@launch
-                        }
-                    }
-                    // 2) Full reopen after exhausting retries
-                    val wk = session.workspaceKey
-                    if (wk != null && !session.isDisposed) {
+                    if (session.isDisposed) return@launch
+                    val workspaceKey = session.workspaceKey
+                    if (workspaceKey != null) {
                         try {
                             reopenBridge(session)
                             session.degraded.value = null
+                            onLog?.invoke("[bridge] recovered $workspaceKey")
                         } catch (e: Exception) {
                             session.degraded.value = "reopen-failed: $e"
+                            onLog?.invoke("[bridge] reopen failed: $e")
                         }
+                    } else {
+                        session.degraded.value = null
                     }
-                } finally { session.isRecovering = false }
+                } finally {
+                    session.isRecovering = false
+                }
             }
         }
     }
