@@ -402,6 +402,7 @@ class ConversationV4Session private constructor(
                 _pendingPatch = null
                 ackedRevisions.clear()
                 synchronized(stagedFrames) { stagedFrames.clear() }
+                synchronized(siStaged) { siStaged.clear() }
                 _loading.value = true
                 runCatching { ensureHandshake() }
                     .onFailure { log("[v4] handshake failed: $it") }
@@ -656,10 +657,7 @@ class ConversationV4Session private constructor(
             val m = raw as? Map<*, *> ?: continue
             when (m["op"] as? String) {
                 "row.appended" -> parseRow(m["row"])?.let { row ->
-                    _rows.update { list ->
-                        if (list.any { it.rowId == row.rowId }) list
-                        else list + row
-                    }
+                    setRows(_rows.value + row)
                     totalCount += 1
                     if (firstRowId == null) firstRowId = row.rowId
                 }
@@ -668,7 +666,7 @@ class ConversationV4Session private constructor(
                     // 保留 rowId < fromRowId 的行（对齐官方 fke 语义）
                     val from = (m["fromRowId"] as? Number)?.toLong() ?: continue
                     val before = _rows.value.size
-                    _rows.update { list -> list.filter { it.rowId < from } }
+                    setRows(_rows.value.filter { it.rowId < from })
                     val removed = before - _rows.value.size
                     if (firstRowId != null && from <= firstRowId!!) {
                         totalCount = 0
@@ -682,11 +680,9 @@ class ConversationV4Session private constructor(
                         ?: m["rowId"]?.toString()?.toLongOrNull() ?: continue
                     val path = m["path"]?.toString() ?: continue
                     val append = m["append"]?.toString() ?: continue
-                    _rows.update { list ->
-                        list.map { row ->
-                            if (row.rowId != rid) row else appendToRow(row, path, append)
-                        }
-                    }
+                    setRows(_rows.value.map { row ->
+                        if (row.rowId != rid) row else appendToRow(row, path, append)
+                    })
                 }
                 "state.updated" -> {
                     val patch = m["patch"] as? Map<*, *> ?: continue

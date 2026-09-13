@@ -284,8 +284,9 @@ fun ChatScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var input by remember { mutableStateOf("") }
     var historyUnavailable by remember { mutableStateOf(false) }
-    var pendingFiles by remember { mutableStateOf(listOf<PendingFile>()) }
-    var uploadStatus by remember { mutableStateOf<String?>(null) }
+    // sessionId 变化时重置上传状态和文件列表，避免跨会话残留
+    var pendingFiles by remember(sessionId) { mutableStateOf(listOf<PendingFile>()) }
+    var uploadStatus by remember(sessionId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -1194,7 +1195,9 @@ private fun ThinkingBlock(row: ConvRow) {
  */
 @Composable
 private fun ToolGroupCard(rows: List<ConvRow>, onOpenSubagent: (ConvRow) -> Unit = {}) {
-    var expanded by remember(rows.firstOrNull()?.rowId) { mutableStateOf(false) }
+    // 用第一行的 rowId 作 key；rowId 是 Long（值类型），跨重组稳定
+    val firstRowId = rows.firstOrNull()?.rowId ?: 0L
+    var expanded by remember(firstRowId) { mutableStateOf(false) }
     val ctx = LocalContext.current
     val anyRunning = rows.any {
         it.toolStatus == null || it.toolStatus == "running" || it.toolStatus == "pending"
