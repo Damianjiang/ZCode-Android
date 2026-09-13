@@ -48,19 +48,18 @@ class ChannelClient(
     private var lastRequestId = 0
 
     /**
-     * 桌面端通道就绪信号：Initialize([200]) 帧到达后完成。
-     * 所有 call / 事件注册必须等它（对齐官方 Pne 行为）——
-     * 先于 Initialize 发送的请求会被桌面端静默丢弃。
+     * 桌面端通道就绪信号。
+     * 用 volatile boolean 而非 CompletableDeferred，确保协程取消不会破坏"已初始化"状态。
+     * 任何 call / addEventListener 都会自旋等待它，不依赖外部协程生命周期。
      */
-    private var ready = CompletableDeferred<Unit>()
+    @JvmField
+    var initialized = false
 
     /**
      * 桥接重连后重置就绪信号。
-     * 替换旧的 CompletableDeferred 为全新的：旧的 await 协程会在 awaitReady 的 30s 超时后自然退出，
-     * 新的 call() 会立即等待新 bridge 的 Initialize 帧，不会出现"永远挂起"或"误判为完成"的问题。
      */
     fun resetReady() {
-        ready = CompletableDeferred()
+        initialized = false
     }
 
     private val promiseHandlers = ConcurrentHashMap<Int, CompletableDeferred<Pair<Int, Any?>>>()
@@ -80,7 +79,7 @@ class ChannelClient(
             val type = (header[0] as Number).toInt()
             if (type == RES_INITIALIZE) {
                 onLog?.invoke("[ipc] initialized")
-                if (!ready.isCompleted) ready.complete(Unit)
+                initialized = true
                 return
             }
             if (header.size < 2 || header[1] !is Number) return
@@ -107,10 +106,12 @@ class ChannelClient(
      * 请求会被静默丢弃（对齐官方 Pne 的 ready 门控）。
      */
     private suspend fun awaitReady(timeoutMs: Long = 30_000L) {
-        try {
-            kotlinx.coroutines.withTimeout(timeoutMs) { ready.await() }
-        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            throw TimeoutException("channel init timeout (no Initialize frame from desktop)")
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (!initialized) {
+            if (System.currentTimeMillis() >= deadline) {
+                throw TimeoutException("channel init timeout (no Initialize frame from desktop)")
+            }
+            kotlinx.coroutines.delay(50)
         }
     }
 
