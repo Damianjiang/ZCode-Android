@@ -1163,6 +1163,7 @@ class ConversationV4Session private constructor(
         ack?.get("logEpoch")?.toString()?.let { siLogEpoch = it }
         if (siSubId == null) {
             log("[v4-si] subscribeSessionsIndexV4: missing ack.subscriptionId")
+            siCancel?.invoke(); siCancel = null
             return@withContext
         }
         val staged = synchronized(siStaged) {

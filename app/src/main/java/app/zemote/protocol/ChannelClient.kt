@@ -168,6 +168,8 @@ class ChannelClient(
             try {
                 awaitReady(30_000L)
             } catch (_: Exception) {
+                // awaitReady 超时：移除注册的 handler，避免事件处理器泄漏
+                eventHandlers.remove(id)
                 return@launch
             }
             if (cancelled || sent) return@launch
