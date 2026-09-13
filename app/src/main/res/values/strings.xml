@@ -168,4 +168,13 @@
     <string name="thinking_ellipsis">思考中…</string>
     <string name="thinking_label">思考</string>
     <string name="unnamed_session">未命名会话</string>
+    <string name="unnamed_device">未命名设备</string>
+    <string name="connecting">正在连接…</string>
+    <string name="not_connected">未连接</string>
+    <string name="brand_iris">鸢尾</string>
+    <string name="brand_sky">晴空</string>
+    <string name="brand_lime">青柠</string>
+    <string name="brand_rose">蔷薇</string>
+    <string name="brand_warm_orange">暖橙</string>
+    <string name="status_connected">已连接</string>
 </resources>

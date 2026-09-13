@@ -1,5 +1,7 @@
 package app.zemote.ui.component
 
+import app.zemote.R
+
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -22,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -122,18 +125,18 @@ data class StatusPresentation(val label: String, val color: Color, val pulsing: 
 @Composable
 fun statusPresentation(state: ConnectionState, message: String?): StatusPresentation {
     return when (state) {
-        ConnectionState.CONNECTED -> StatusPresentation("已连接", StatusSuccess, true)
+        ConnectionState.CONNECTED -> StatusPresentation(stringResource(R.string.status_connected), StatusSuccess, true)
         ConnectionState.CONNECTING -> StatusPresentation(
-            message?.takeIf { it.isNotBlank() } ?: "正在连接…",
+            message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.connecting),
             MaterialTheme.colorScheme.tertiary,
             true,
         )
         ConnectionState.ERROR -> StatusPresentation(
-            message?.takeIf { it.isNotBlank() } ?: "连接失败",
+            message?.takeIf { it.isNotBlank() } ?: stringResource(R.string.connect_failed),
             MaterialTheme.colorScheme.error,
             false,
         )
-        ConnectionState.IDLE -> StatusPresentation("未连接", MaterialTheme.colorScheme.onSurfaceVariant, false)
+        ConnectionState.IDLE -> StatusPresentation(stringResource(R.string.not_connected), MaterialTheme.colorScheme.onSurfaceVariant, false)
     }
 }
 

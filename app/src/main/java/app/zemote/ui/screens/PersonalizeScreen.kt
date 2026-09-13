@@ -39,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,6 +48,15 @@ import app.zemote.ui.theme.Palettes
 import app.zemote.ui.theme.ThemeManager
 
 /** 个性化页：主题颜色色盘 + 亮暗模式 + 动态取色 */
+private fun paletteLabel(ctx: android.content.Context, key: String): String = when (key) {
+    "iris" -> ctx.getString(R.string.brand_iris)
+    "blue" -> ctx.getString(R.string.brand_sky)
+    "green" -> ctx.getString(R.string.brand_lime)
+    "rose" -> ctx.getString(R.string.brand_rose)
+    "orange" -> ctx.getString(R.string.brand_warm_orange)
+    else -> key
+}
+
 @Composable
 fun PersonalizeScreen(
     onBack: () -> Unit,
@@ -95,7 +105,7 @@ fun PersonalizeScreen(
                         Palettes.forEach { spec ->
                             ColorSwatch(
                                 colors = listOf(spec.swatch, spec.light.secondaryContainer),
-                                label = spec.label,
+                                label = paletteLabel(LocalContext.current, spec.key),
                                 selected = themeState.palette == spec.key,
                                 onClick = { themeManager.setPalette(spec.key) },
                             )

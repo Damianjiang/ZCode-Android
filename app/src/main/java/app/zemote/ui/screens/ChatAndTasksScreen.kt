@@ -496,7 +496,7 @@ fun ChatScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text(
-                                    "该会话暂无可见消息。\n可以直接在下方输入框发起新话题。",
+                                    stringResource(R.string.session_empty),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(14.dp),

@@ -53,7 +53,7 @@ class AccountStore(
         val acc = Account(
             id = UUID.randomUUID().toString(),
             label = label?.trim()?.takeIf { it.isNotEmpty() }
-                ?: params?.deviceName ?: params?.sourceHost ?: "未命名设备",
+                ?: params?.deviceName ?: params?.sourceHost ?: "Unnamed device",
             url = url.trim(),
             addedAt = System.currentTimeMillis(),
         )
@@ -111,7 +111,7 @@ class AccountStore(
             if (_accounts.value.any { it.url == url }) continue
             imported.add(Account(
                 id = m["id"] as? String ?: UUID.randomUUID().toString(),
-                label = m["label"] as? String ?: "未命名设备",
+                label = m["label"] as? String ?: "Unnamed device",
                 url = url,
                 addedAt = (m["addedAt"] as? Number)?.toLong() ?: 0,
                 lastUsedAt = (m["lastUsedAt"] as? Number)?.toLong(),
@@ -143,7 +143,7 @@ class AccountStore(
             } else encUrl
             Account(
                 id = map["id"] as? String ?: UUID.randomUUID().toString(),
-                label = map["label"] as? String ?: "未命名设备",
+                label = map["label"] as? String ?: "Unnamed device",
                 url = plainUrl,
                 addedAt = (map["addedAt"] as? Number)?.toLong() ?: 0,
                 lastUsedAt = (map["lastUsedAt"] as? Number)?.toLong(),

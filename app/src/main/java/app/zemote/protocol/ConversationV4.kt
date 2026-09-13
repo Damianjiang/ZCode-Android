@@ -44,7 +44,7 @@ suspend fun fetchTasksFromBootstrap(client: ZemoteClient, workspaceKey: String? 
         }
         TaskEntry(
             taskId = id,
-            title = m["title"]?.toString() ?: "未命名任务",
+            title = m["title"]?.toString() ?: "Untitled task",
             status = m["displayStatus"]?.toString(),
             workspacePath = m["workspacePath"]?.toString(),
             workspaceLabel = m["workspaceLabel"]?.toString(),

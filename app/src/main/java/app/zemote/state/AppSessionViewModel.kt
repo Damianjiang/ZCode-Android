@@ -136,7 +136,7 @@ class AppSessionViewModel : ViewModel() {
                 setStatus(account.id, DeviceStatus(ConnectionState.CONNECTING))
                 val params = account.params
                 if (params == null) {
-                    setStatus(account.id, DeviceStatus(ConnectionState.ERROR, "无法解析连接 URL（需要 sid/hash/t 参数）"))
+                    setStatus(account.id, DeviceStatus(ConnectionState.ERROR, "Cannot parse pairing URL (sid/hash/t required)"))
                     return@withLock
                 }
                 val client = ZemoteClient(params, onLog = { msg -> android.util.Log.d("Zemote", msg) })

@@ -1,5 +1,7 @@
 # ZCode-Android (Zemote)
 
+简体中文 | [English](README_EN.md)
+
 Android 端的 ZCode 远程控制客户端。通过逆向官方 Web 远程控制页面的通信协议实现，
 可以在手机上查看和操控桌面端 ZCode 的会话，不依赖浏览器。
 

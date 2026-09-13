@@ -168,4 +168,13 @@
     <string name="thinking_ellipsis">Thinking…</string>
     <string name="thinking_label">Thinking</string>
     <string name="unnamed_session">Unnamed session</string>
+    <string name="unnamed_device">Unnamed device</string>
+    <string name="connecting">Connecting…</string>
+    <string name="not_connected">Offline</string>
+    <string name="brand_iris">Iris</string>
+    <string name="brand_sky">Sky</string>
+    <string name="brand_lime">Lime</string>
+    <string name="brand_rose">Rose</string>
+    <string name="brand_warm_orange">Warm orange</string>
+    <string name="status_connected">Connected</string>
 </resources>
