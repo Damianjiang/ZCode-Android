@@ -2,6 +2,9 @@ package app.zemote.ui.logger
 
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -32,7 +35,9 @@ object ZemoteLogger {
 
     private const val MAX_ENTRIES = 1000
     private val _entries = mutableStateOf<List<LogEntry>>(emptyList())
+    private val _entriesFlow = MutableStateFlow<List<LogEntry>>(emptyList())
     val entries: State<List<LogEntry>> get() = _entries
+    val entriesFlow: StateFlow<List<LogEntry>> get() = _entriesFlow.asStateFlow()
 
     /** 总开关：设为 false 后所有写入被静默丢弃，用于设置页控制 */
     private val _enabled = AtomicBoolean(true)
@@ -65,7 +70,9 @@ object ZemoteLogger {
         _queue.add(entry)
         synchronized(_lock) {
             while (_queue.size > MAX_ENTRIES) _queue.poll()
-            _entries.value = _queue.toList().reversed()
+            val snapshot = _queue.toList().reversed()
+            _entries.value = snapshot
+            _entriesFlow.value = snapshot
         }
     }
 

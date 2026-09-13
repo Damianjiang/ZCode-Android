@@ -42,12 +42,13 @@ import androidx.compose.ui.unit.dp
 import app.zemote.R
 import app.zemote.ui.logger.ZemoteLogger
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LogScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    val entries by ZemoteLogger.entries
+    val entries by ZemoteLogger.entriesFlow.collectAsState(initial = emptyList())
     val snackbarHostState = remember { SnackbarHostState() }
     val clipboard = LocalClipboardManager.current
     val hasEntries = entries.isNotEmpty()

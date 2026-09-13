@@ -108,8 +108,8 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
 
     fun closeConversation(accountId: String, workspaceKey: String) {
         val toClose = synchronized(conversationsLock) {
-            val prefix = "$accountId|$workspaceKey|"
-            conversations.keys.filter { it.startsWith(prefix) }
+            val key = "$accountId|$workspaceKey"
+            conversations.filterKeys { it == key }.keys
                 .mapNotNull { conversations.remove(it) }
         }
         toClose.forEach { it.dispose() }

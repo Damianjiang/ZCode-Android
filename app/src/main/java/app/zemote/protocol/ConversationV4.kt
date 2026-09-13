@@ -91,6 +91,8 @@ data class ConvRow(
     val childSessionId: String? = null,
     /** 子智能体独有：子智能体类型（如 "agent" / "task" / "read" 等） */
     val subagentType: String? = null,
+    /** 版本号：rows 列表整体替换时递增，供 UI 层用 remember(rows.version) 优化 */
+    val version: Int = 0,
 )
 
 object ConvKinds {
@@ -197,7 +199,16 @@ class ConversationV4Session private constructor(
 
     // ── 状态（UI 绑定） ──
     private val _rows = MutableStateFlow<List<ConvRow>>(emptyList())
+    private val _rowsVersion = MutableStateFlow(0)
     val rows: StateFlow<List<ConvRow>> = _rows.asStateFlow()
+    /** 行列表整体替换版本号；每次 setRows 调用后 +1，供 remember(version, rows) 优化聚合计算 */
+    val rowsVersion: StateFlow<Int> = _rowsVersion
+
+    /** 替换 rows 列表时递增版本号，供 UI 层用 remember(rowsVersion.value, rows) 优化聚合计算 */
+    private fun setRows(newRows: List<ConvRow>) {
+        _rowsVersion.value++
+        _rows.value = newRows.map { row -> row.copy(version = _rowsVersion.value) }
+    }
 
     private val _activeSessionId = MutableStateFlow<String?>(null)
     val activeSessionId: StateFlow<String?> = _activeSessionId.asStateFlow()
@@ -382,7 +393,7 @@ class ConversationV4Session private constructor(
             try {
                 unsubscribeConversation()
                 _activeSessionId.value = sessionId
-                _rows.value = emptyList()
+                setRows(emptyList())
                 firstRowId = null
                 totalCount = 0
                 convSeq = 0
@@ -624,11 +635,11 @@ class ConversationV4Session private constructor(
             val window = (rowsObj["window"] as? List<*>)?.mapNotNull(::parseRow).orEmpty()
             val head = window.firstOrNull()?.rowId
             val older = if (head != null) _rows.value.filter { it.rowId < head } else emptyList()
-            _rows.value = (older + window).sortedBy { it.rowId }
+            setRows((older + window).sortedBy { it.rowId })
             totalCount = (rowsObj["totalCount"] as? Number)?.toLong() ?: _rows.value.size.toLong()
             firstRowId = (rowsObj["firstRowId"] as? Number)?.toLong()
         } else {
-            _rows.value = emptyList()
+            setRows(emptyList())
             totalCount = 0
             firstRowId = null
         }
@@ -1366,7 +1377,7 @@ class ConversationV4Session private constructor(
     private fun mergeRows(incoming: List<ConvRow>) {
         val byId = _rows.value.associateBy { it.rowId }.toMutableMap()
         incoming.forEach { byId[it.rowId] = it }
-        _rows.value = byId.values.sortedBy { it.rowId }
+        setRows(byId.values.sortedBy { it.rowId })
     }
 
     private fun mergeRow(row: ConvRow) = mergeRows(listOf(row))

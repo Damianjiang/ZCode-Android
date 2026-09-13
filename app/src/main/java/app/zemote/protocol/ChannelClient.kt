@@ -51,7 +51,15 @@ class ChannelClient(
      * 所有 call / 事件注册必须等它（对齐官方 Pne 行为）——
      * 先于 Initialize 发送的请求会被桌面端静默丢弃。
      */
-    private val ready = CompletableDeferred<Unit>()
+    private var ready = CompletableDeferred<Unit>()
+
+    /**
+     * 桥接重连后重置就绪信号，迫使下一个 call() 等待新的 Initialize 帧。
+     * 必须在 swapBridge 后、新 transport 建立前调用（此时 _channels 是新实例，ready 已全新）。
+     */
+    fun resetReady() {
+        ready = CompletableDeferred()
+    }
 
     private val promiseHandlers = ConcurrentHashMap<Int, CompletableDeferred<Pair<Int, Any?>>>()
     private val eventHandlers = ConcurrentHashMap<Int, (Any?) -> Unit>()

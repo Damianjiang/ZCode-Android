@@ -385,7 +385,8 @@ fun ChatScreen(
 
     // 工具调用行聚合：连续的 toolCall/subagent 合并为一张「执行过程」卡片，
     // 只显示执行了什么/修改了什么，不直接刷原始 toolcall
-    val displayItems = remember(rows) { buildDisplayItems(rows) }
+    // 用 rowsVersion 作为 key，流式 delta 时 version 不变，避免每次字符追加都重建整个列表
+    val displayItems = remember(repo?.rowsVersion?.value ?: 0, rows) { buildDisplayItems(rows) }
 
     // 新消息到达（条目数变化）：滚动定位到最新一条
     LaunchedEffect(displayItems.size, historyUnavailable) {

@@ -144,13 +144,6 @@ fun SettingsScreen(
                         onClick = onOpenChangelog,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                     )
-                    SettingRow(
-                        icon = Icons.Rounded.BugReport,
-                        title = stringResource(R.string.debug_logs),
-                        subtitle = stringResource(R.string.debug_logs_sub),
-                        onClick = onOpenLogs,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                    )
                 }
             }
 

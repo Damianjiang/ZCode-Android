@@ -80,6 +80,8 @@ class BridgeSession(
         relayListenerScope = null
         _transport = buildTransport(newRelay)
         _channels = buildChannels(_transport)
+        // 重置 ready：新 bridge 的 Initialize 帧未到达，需重新等待
+        _channels.resetReady()
         // Re-wire: assembled IPC bodies → new channel client
         _transport.onMessage = { frame -> _channels.handleMessage(frame) }
         // Start fresh listener for the new bridge session
