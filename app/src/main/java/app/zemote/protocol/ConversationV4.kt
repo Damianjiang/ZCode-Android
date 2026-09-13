@@ -350,6 +350,7 @@ class ConversationV4Session private constructor(
     /** hello + clientHello 握手（每个 bridge 连接一次） */
     private suspend fun ensureHandshake() {
         if (handshakeDone) return
+        if (!sessionScope.isActive) return
         val hello = call("helloConversationV4", emptyList()) as? Map<*, *>
         connectionId = hello?.get("connectionId")?.toString()
         call(
@@ -417,7 +418,7 @@ class ConversationV4Session private constructor(
                         runCatching { prepareWorkspace() }
                     }
                 }
-                if (sessionId != null) {
+                if (sessionId != null && sessionScope.isActive) {
                     runCatching { subscribeConversation(sessionId) }
                         .onFailure { log("[v4] subscribe failed: $it") }
                     try {
@@ -428,7 +429,9 @@ class ConversationV4Session private constructor(
                     // 兜底：桌面端会话运行时可能未预热，首拉为空时自动补拉两次
                     if (_rows.value.isEmpty()) {
                         repeat(2) { attempt ->
+                            if (!sessionScope.isActive) return@withTimeout
                             delay(if (attempt == 0) 2500L else 5000L)
+                            if (!sessionScope.isActive) return@withTimeout
                             if (_rows.value.isNotEmpty()) return@repeat
                             log("[v4] history empty, retry #$attempt")
                             runCatching { resyncConversation() }
@@ -446,6 +449,7 @@ class ConversationV4Session private constructor(
     }
 
     private suspend fun subscribeConversation(sessionId: String) {
+        if (!sessionScope.isActive) return
         convCancel?.invoke()
         convCancel = null
         val listener = channels.addEventListener(
