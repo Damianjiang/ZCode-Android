@@ -182,4 +182,6 @@
     <string name="keepalive_channel">连接保活</string>
     <string name="keepalive_title">已连接「%1$s」</string>
     <string name="keepalive_text">会话保活中，保持与桌面端的连接</string>
+    <string name="subagent_open">查看子智能体</string>
+    <string name="subagent_session">子智能体会话</string>
 </resources>

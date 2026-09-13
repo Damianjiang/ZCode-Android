@@ -51,6 +51,9 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat/{workspaceKey}/{sessionId}") {
         fun createRoute(workspaceKey: String, sessionId: String) = "chat/$workspaceKey/$sessionId"
     }
+    object Subagent : Screen("subagent/{workspaceKey}/{childSessionId}") {
+        fun createRoute(workspaceKey: String, childSessionId: String) = "subagent/$workspaceKey/$childSessionId"
+    }
 }
 
 @Composable
@@ -135,6 +138,20 @@ fun ZemoteNavHost(
                 sessionId = sessionId,
                 session = sessionViewModel,
                 onBack = { navController.popBackStack() },
+                onOpenSubagent = { wk, cid ->
+                    navController.navigate(Screen.Subagent.createRoute(wk, cid))
+                },
+            )
+        }
+        composable(Screen.Subagent.route) { backStackEntry ->
+            val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
+            val childSessionId = backStackEntry.arguments?.getString("childSessionId") ?: return@composable
+            ChatScreen(
+                workspaceKey = workspaceKey,
+                sessionId = childSessionId,
+                session = sessionViewModel,
+                onBack = { navController.popBackStack() },
+                readOnly = true,
             )
         }
     }

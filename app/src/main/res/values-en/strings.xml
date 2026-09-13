@@ -24,7 +24,7 @@
     <string name="no_workspaces">No workspaces open on the desktop</string>
     <string name="connect_failed">Connection failed</string>
     <string name="retry_connect">Retry</string>
-    <string name="pairing_with">Pairing with “%1$s”</string>
+    <string name="pairing_with">Pairing with "%1$s"</string>
     <string name="pairing_hint">Secure handshake with the desktop; the first connection can take up to 90 seconds</string>
     <string name="unknown_workspace">Unknown workspace</string>
     <string name="switch_device">Switch device</string>
@@ -129,7 +129,7 @@
     <string name="remote_url_hint">Copy the remote control link from desktop ZCode</string>
     <string name="device_name_optional">Device name (optional)</string>
     <string name="scan_add">Scan to add</string>
-    <string name="deleted_toast">Deleted “%1$s”</string>
+    <string name="deleted_toast">Deleted "%1$s"</string>
 
     <string name="crash_title">The app crashed</string>
     <string name="crash_hint">The crash log is below — copy it and send it to the developer</string>
@@ -180,6 +180,8 @@
     <string name="qr_permission_denied">Camera permission denied — scanning unavailable</string>
     <string name="qr_retry">Grant camera access and retry</string>
     <string name="keepalive_channel">Keep-alive</string>
-    <string name="keepalive_title">Connected to “%1$s”</string>
+    <string name="keepalive_title">Connected to "%1$s"</string>
     <string name="keepalive_text">Keeping the connection to your desktop alive</string>
+    <string name="subagent_open">View subagent</string>
+    <string name="subagent_session">Subagent session</string>
 </resources>

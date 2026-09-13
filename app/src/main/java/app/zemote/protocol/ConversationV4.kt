@@ -87,6 +87,10 @@ data class ConvRow(
     val additions: Int? = null,
     val issuedAt: Long? = null,
     val attachments: List<Map<String, String>> = emptyList(),
+    /** 子智能体独有：子会话 ID（null 表示非子智能体行） */
+    val childSessionId: String? = null,
+    /** 子智能体独有：子智能体类型（如 "agent" / "task" / "read" 等） */
+    val subagentType: String? = null,
 )
 
 object ConvKinds {
@@ -1345,6 +1349,8 @@ class ConversationV4Session private constructor(
             additions = (m["additions"] as? Number)?.toInt(),
             issuedAt = (m["issuedAt"] as? Number)?.toLong() ?: (m["createdAt"] as? Number)?.toLong(),
             attachments = attachments,
+            childSessionId = (m["childSessionId"] as? String)?.takeIf { it.isNotBlank() },
+            subagentType = (m["subagentType"] as? String)?.takeIf { it.isNotBlank() },
         )
     }
 

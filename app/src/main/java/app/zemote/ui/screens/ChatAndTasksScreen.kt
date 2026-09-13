@@ -276,6 +276,8 @@ fun ChatScreen(
     sessionId: String?,
     session: AppSessionViewModel,
     onBack: () -> Unit,
+    onOpenSubagent: (String, String) -> Unit = { _, _ -> },
+    readOnly: Boolean = false,
 ) {
     val accountId = session.activeId
     var repo by remember { mutableStateOf<app.zemote.protocol.ConversationV4Session?>(null) }
@@ -507,16 +509,22 @@ fun ChatScreen(
                         when (item) {
                             is DisplayItem.Single -> {
                                 if (item.row.kind == ConvKinds.USER_INPUT) {
-                                    TimelineRow(item.row, loadAttachment)
+                                    TimelineRow(item.row, loadAttachment, onOpenSubagent = { row ->
+                                        row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid) }
+                                    })
                                 } else {
                                     // AI 产生的内容淡入，更灵动
                                     FadeInContainer(item.key) {
-                                        TimelineRow(item.row, loadAttachment)
+                                        TimelineRow(item.row, loadAttachment, onOpenSubagent = { row ->
+                                            row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid) }
+                                        })
                                     }
                                 }
                             }
                             is DisplayItem.ToolGroup -> FadeInContainer(item.key) {
-                                ToolGroupCard(item.rows)
+                                ToolGroupCard(item.rows, onOpenSubagent = { row ->
+                                    row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid) }
+                                })
                             }
                         }
                     }
@@ -552,95 +560,97 @@ fun ChatScreen(
                 }
             }
 
-            // 排队消息卡片：AI 工作中发送的内容进入队列，可立即发送/编辑/删除（官方队列语义）
-            QueueBar(
-                items = queueItems,
-                autoDrain = autoDrain,
-                onSendNow = { id -> scope.launch { runCatching { repo?.sendQueuedNow(id) } } },
-                onEdit = { id, text -> scope.launch { runCatching { repo?.editQueueItem(id, text) } } },
-                onDelete = { id -> scope.launch { runCatching { repo?.deleteQueueItem(id) } } },
-                onToggleAutoDrain = { on -> scope.launch { runCatching { repo?.setAutoDrain(on) } } },
-                onReorder = { ids -> scope.launch { runCatching { repo?.reorderQueueItem(ids) } } },
-            )
+            if (!readOnly) {
+                // 排队消息卡片：AI 工作中发送的内容进入队列，可立即发送/编辑/删除（官方队列语义）
+                QueueBar(
+                    items = queueItems,
+                    autoDrain = autoDrain,
+                    onSendNow = { id -> scope.launch { runCatching { repo?.sendQueuedNow(id) } } },
+                    onEdit = { id, text -> scope.launch { runCatching { repo?.editQueueItem(id, text) } } },
+                    onDelete = { id -> scope.launch { runCatching { repo?.deleteQueueItem(id) } } },
+                    onToggleAutoDrain = { on -> scope.launch { runCatching { repo?.setAutoDrain(on) } } },
+                    onReorder = { ids -> scope.launch { runCatching { repo?.reorderQueueItem(ids) } } },
+                )
 
-            if (pendingFiles.isNotEmpty() || uploadStatus != null) {
-                PendingFilesBar(
-                    files = pendingFiles,
-                    status = uploadStatus,
-                    onRemove = { f -> pendingFiles = pendingFiles - f },
+                if (pendingFiles.isNotEmpty() || uploadStatus != null) {
+                    PendingFilesBar(
+                        files = pendingFiles,
+                        status = uploadStatus,
+                        onRemove = { f -> pendingFiles = pendingFiles - f },
+                    )
+                }
+
+                ComposerBar(
+                    text = input,
+                    onTextChange = { input = it },
+                    working = working,
+                    enabled = repo != null && error == null,
+                    config = convConfig,
+                    usage = usage,
+                    modelOptions = modelOptions,
+                    stopWorkId = stopWorkId,
+                    followupMode = followupMode,
+                    onAttach = { pickFiles.launch(arrayOf("*/*")) },
+                    onThoughtSelect = { level ->
+                        scope.launch { runCatching { repo?.setThought(level) } }
+                    },
+                    onModelSelect = { provider, model ->
+                        scope.launch { runCatching { repo?.setModel(provider, model) } }
+                    },
+                    onSend = { queued ->
+                        val text = input
+                        val files = pendingFiles
+                        input = ""
+                        autoFollow = true
+                        scope.launch {
+                            runCatching {
+                                val repo0 = repo ?: return@launch
+                                var target = activeId
+                                if (files.isNotEmpty()) {
+                                    // 官方路径：附件需先有 sessionId 才能上传 →
+                                    // createSession → attachmentPut → sendText(attachments)
+                                    if (target == null) {
+                                        target = repo0.createSession()
+                                            ?: throw IllegalStateException(context.getString(R.string.create_session_failed))
+                                    }
+                                    val descriptors = mutableListOf<Map<String, Any?>>()
+                                    files.forEachIndexed { i, f ->
+                                        uploadStatus = context.getString(R.string.uploading_files, i + 1, files.size)
+                                        val up = repo0.attachmentPut(target, f.name, f.mime, f.bytes) { p ->
+                                            uploadStatus = context.getString(R.string.uploading_progress, i + 1, files.size, (p * 100).toInt())
+                                        }
+                                        if (up.ref.isNullOrBlank()) throw IllegalStateException(context.getString(R.string.attach_failed, f.name))
+                                        descriptors.add(mapOf(
+                                            "ref" to up.ref,
+                                            "fileName" to up.fileName,
+                                            "mime" to up.mime,
+                                            "bytes" to up.bytes,
+                                        ))
+                                    }
+                                    uploadStatus = null
+                                    pendingFiles = emptyList()
+                                    repo0.sendText(text, target, attachments = descriptors)
+                                } else {
+                                    // AI 回复中 → 官方 queue 语义（排队）；空闲 → startNow。
+                                    // 后续更新完全由订阅帧（row.appended / row.delta）推送，不做轮询
+                                    repo0.sendText(
+                                        text,
+                                        target,
+                                        requestedDelivery = if (queued) "queue" else "startNow",
+                                    )
+                                }
+                            }.onFailure {
+                                input = text
+                                pendingFiles = files
+                                uploadStatus = null
+                            }
+                        }
+                    },
+                    onStop = {
+                        scope.launch { runCatching { repo?.stop(activeId) } }
+                    },
                 )
             }
-
-            ComposerBar(
-                text = input,
-                onTextChange = { input = it },
-                working = working,
-                enabled = repo != null && error == null,
-                config = convConfig,
-                usage = usage,
-                modelOptions = modelOptions,
-                stopWorkId = stopWorkId,
-                followupMode = followupMode,
-                onAttach = { pickFiles.launch(arrayOf("*/*")) },
-                onThoughtSelect = { level ->
-                    scope.launch { runCatching { repo?.setThought(level) } }
-                },
-                onModelSelect = { provider, model ->
-                    scope.launch { runCatching { repo?.setModel(provider, model) } }
-                },
-                onSend = { queued ->
-                    val text = input
-                    val files = pendingFiles
-                    input = ""
-                    autoFollow = true
-                    scope.launch {
-                        runCatching {
-                            val repo0 = repo ?: return@launch
-                            var target = activeId
-                            if (files.isNotEmpty()) {
-                                // 官方路径：附件需先有 sessionId 才能上传 →
-                                // createSession → attachmentPut → sendText(attachments)
-                                if (target == null) {
-                                    target = repo0.createSession()
-                                        ?: throw IllegalStateException(context.getString(R.string.create_session_failed))
-                                }
-                                val descriptors = mutableListOf<Map<String, Any?>>()
-                                files.forEachIndexed { i, f ->
-                                    uploadStatus = context.getString(R.string.uploading_files, i + 1, files.size)
-                                    val up = repo0.attachmentPut(target, f.name, f.mime, f.bytes) { p ->
-                                        uploadStatus = context.getString(R.string.uploading_progress, i + 1, files.size, (p * 100).toInt())
-                                    }
-                                    if (up.ref.isNullOrBlank()) throw IllegalStateException(context.getString(R.string.attach_failed, f.name))
-                                    descriptors.add(mapOf(
-                                        "ref" to up.ref,
-                                        "fileName" to up.fileName,
-                                        "mime" to up.mime,
-                                        "bytes" to up.bytes,
-                                    ))
-                                }
-                                uploadStatus = null
-                                pendingFiles = emptyList()
-                                repo0.sendText(text, target, attachments = descriptors)
-                            } else {
-                                // AI 回复中 → 官方 queue 语义（排队）；空闲 → startNow。
-                                // 后续更新完全由订阅帧（row.appended / row.delta）推送，不做轮询
-                                repo0.sendText(
-                                    text,
-                                    target,
-                                    requestedDelivery = if (queued) "queue" else "startNow",
-                                )
-                            }
-                        }.onFailure {
-                            input = text
-                            pendingFiles = files
-                            uploadStatus = null
-                        }
-                    }
-                },
-                onStop = {
-                    scope.launch { runCatching { repo?.stop(activeId) } }
-                },
-            )
         }
     }
 }
@@ -648,7 +658,7 @@ fun ChatScreen(
 // ────────────────────────── 时间线渲染 ──────────────────────────
 
 @Composable
-private fun TimelineRow(row: ConvRow, loadAttachment: suspend (String) -> app.zemote.protocol.AttachmentData?) {
+private fun TimelineRow(row: ConvRow, loadAttachment: suspend (String) -> app.zemote.protocol.AttachmentData?, onOpenSubagent: (ConvRow) -> Unit = {}) {
     when (row.kind) {
         ConvKinds.USER_INPUT -> UserBubble(row, loadAttachment)
         ConvKinds.ASSISTANT_TEXT -> if (row.text.isNotBlank()) {
@@ -660,9 +670,9 @@ private fun TimelineRow(row: ConvRow, loadAttachment: suspend (String) -> app.ze
         ConvKinds.REASONING -> if (row.text.isNotBlank()) ThinkingBlock(row)
         // 工具调用统一走「执行过程」汇总卡片（正常路径由 buildDisplayItems 聚合，
         // 此处兜底处理未聚合的单条）
-        ConvKinds.TOOL_CALL -> ToolGroupCard(listOf(row))
+        ConvKinds.TOOL_CALL -> ToolGroupCard(listOf(row), onOpenSubagent)
         ConvKinds.SUBAGENT -> if (row.summaryText.isNotBlank() || row.text.isNotBlank()) {
-            ToolGroupCard(listOf(row.copy(toolName = "subagent", inputText = row.summaryText.ifBlank { row.text })))
+            ToolGroupCard(listOf(row.copy(toolName = "subagent", inputText = row.summaryText.ifBlank { row.text })), onOpenSubagent)
         }
         // 图片类消息：占位卡片展示，绝不出现加载失败的破图
         ConvKinds.IMAGE, "screenshot" -> ImagePlaceholder(row)
@@ -1181,7 +1191,7 @@ private fun ThinkingBlock(row: ConvRow) {
  * 默认只显示每步一句话；点击展开可看各步原始输出。
  */
 @Composable
-private fun ToolGroupCard(rows: List<ConvRow>) {
+private fun ToolGroupCard(rows: List<ConvRow>, onOpenSubagent: (ConvRow) -> Unit = {}) {
     var expanded by remember(rows.firstOrNull()?.rowId) { mutableStateOf(false) }
     val ctx = LocalContext.current
     val anyRunning = rows.any {
@@ -1223,6 +1233,19 @@ private fun ToolGroupCard(rows: List<ConvRow>) {
                     ThinkingDot()
                 } else if (anyFailed) {
                     Text(stringResource(R.string.some_failed), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                }
+                // 子智能体入口：组内任一行为子智能体且含 childSessionId 时显示
+                val subagentRow = rows.firstOrNull { it.childSessionId != null }
+                if (subagentRow != null) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        stringResource(R.string.subagent_open),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable { onOpenSubagent(subagentRow) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
                 }
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
