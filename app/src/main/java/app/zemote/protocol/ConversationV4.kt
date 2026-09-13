@@ -461,6 +461,7 @@ class ConversationV4Session private constructor(
         ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
         if (convSubId == null) {
             log("[v4] subscribeConversationV4: missing ack.subscriptionId")
+            convCancel?.invoke(); convCancel = null
             return
         }
         // 应答前到达的帧按序回放
@@ -483,8 +484,8 @@ class ConversationV4Session private constructor(
         _agentWorking.value = false
         _stopWorkId.value = null
         if (id != null) {
-            // 尽力通知桌面端退订；bridge 销毁时服务端订阅随之消亡，失败可忽略
-            CoroutineScope(Dispatchers.IO).launch {
+            // 使用 sessionScope 而非裸 CoroutineScope，确保 dispose 时能随会话一起取消
+            sessionScope.launch {
                 runCatching {
                     call("unsubscribeConversationV4", listOf(scope() + mapOf("subscriptionId" to id)))
                 }
@@ -1392,7 +1393,8 @@ class ConversationV4Session private constructor(
         val id = siSubId
         siSubId = null
         if (id != null) {
-            CoroutineScope(Dispatchers.IO).launch {
+            // 同样使用 sessionScope，确保 dispose 时能随会话一起取消
+            sessionScope.launch {
                 runCatching {
                     channels.call(
                         ChannelClient.Channel.ZCODE_AGENT,
