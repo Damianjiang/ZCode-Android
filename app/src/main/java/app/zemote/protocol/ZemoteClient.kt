@@ -300,23 +300,21 @@ class ZemoteClient(
                             try {
                                 val res = reconnectWorkspace(workspaceKey)
                                 if (res["success"] == true) {
-                                    // reconnectWorkspace 成功 → 桌面分配了新 bridge，需要更新 bridge 元数据
-                                    // 否则 relay 监听器仍绑定旧 bridgeSessionId，收不到新消息
                                     @Suppress("UNCHECKED_CAST")
                                     val bridge = res["bridge"] as? Map<String, Any>
                                     if (!bridge.isNullOrEmpty()) {
                                         session.swapBridge(bridge, relay)
+                                        onLog?.invoke("[bridge] reconnected $workspaceKey")
+                                        session.degraded.value = null
+                                        session.recovered.value = session.recovered.value + 1
+                                        session.isRecovering = false
+                                        return@launch
                                     } else {
-                                        // 没有 bridge 数据，说明 reconnect 不完整，继续尝试 reopen
-                                        onLog?.invoke("[bridge] reconnected but no bridge data, retrying with reopen")
-                                        delay(2000)
-                                        continue
+                                        // reconnectWorkspace 成功但无 bridge 数据 → 桌面端不认这个 reconnect 路径，
+                                        // 立即跳出循环走 reopen，避免无限重试
+                                        onLog?.invoke("[bridge] reconnected but no bridge data, switching to reopen")
+                                        break
                                     }
-                                    onLog?.invoke("[bridge] reconnected $workspaceKey")
-                                    session.degraded.value = null
-                                    session.recovered.value = session.recovered.value + 1
-                                    session.isRecovering = false
-                                    return@launch
                                 }
                             } catch (e: Exception) {
                                 onLog?.invoke("[bridge] reconnect-request failed: $e")
