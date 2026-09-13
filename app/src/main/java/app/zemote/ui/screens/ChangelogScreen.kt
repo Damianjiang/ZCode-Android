@@ -49,6 +49,12 @@ private data class ChangelogEntry(
 
 private val Changelogs = listOf(
     ChangelogEntry(
+        "v1.6.0", "2026-09-13",
+        listOf(
+            "进入应用自动申请所需权限（相机），扫码配对即点即用",
+        ),
+    ),
+    ChangelogEntry(
         "v1.5.9", "2026-09-13",
         listOf(
             "新增扫码配对：对准桌面端二维码即可添加设备，本地解码不依赖 Google 服务",

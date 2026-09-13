@@ -1,10 +1,12 @@
 package app.zemote
 
+import android.Manifest
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.app.ActivityCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,6 +38,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 进入应用即申请所需权限（相机：扫码配对用；已授权则不再弹窗）
+        ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
 
         // 检测上次崩溃：存在崩溃报告则直接进入崩溃页
         val crashLog = CrashHandler.read(this)
