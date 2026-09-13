@@ -294,7 +294,6 @@ class ZemoteClient(
                 try {
                     for (attempt in 1..15) {
                         if (session.isDisposed) return@launch
-                        // 1) Cheap path: workspace-reconnect-request
                         val workspaceKey = session.workspaceKey
                         if (workspaceKey != null) {
                             try {
@@ -306,7 +305,9 @@ class ZemoteClient(
                                         session.swapBridge(bridge, relay)
                                         onLog?.invoke("[bridge] reconnected $workspaceKey")
                                         session.degraded.value = null
-                                        session.recovered.value = session.recovered.value + 1
+                                        // 重建握手/订阅由 ConversationV4Session.init 内的 bridge.recovered 流驱动，
+                                        // 此处只需清除 degraded 状态；若会话协程仍存活则会触发重建，
+                                        // 若已取消则由下次 openConversation 自然完成。
                                         session.isRecovering = false
                                         return@launch
                                     } else {
@@ -319,15 +320,14 @@ class ZemoteClient(
                             } catch (e: Exception) {
                                 onLog?.invoke("[bridge] reconnect-request failed: $e")
                             }
+                            if (session.isDisposed) return@launch
+                            onLog?.invoke("[bridge] recovery attempt $attempt failed, retrying")
+                            delay(3000)
                         } else {
                             session.degraded.value = null
-                            session.recovered.value = session.recovered.value + 1
                             session.isRecovering = false
                             return@launch
                         }
-                        if (session.isDisposed) return@launch
-                        onLog?.invoke("[bridge] recovery attempt $attempt failed, retrying")
-                        delay(3000)
                     }
                     // 2) Full reopen after exhausting retries
                     val wk = session.workspaceKey
@@ -335,7 +335,6 @@ class ZemoteClient(
                         try {
                             reopenBridge(session)
                             session.degraded.value = null
-                            session.recovered.value = session.recovered.value + 1
                         } catch (e: Exception) {
                             session.degraded.value = "reopen-failed: $e"
                         }

@@ -284,22 +284,21 @@ class ConversationV4Session private constructor(
     private var rebuilding = false
 
     init {
-        // bridge 重连/重开后：旧 channel 栈与订阅全部作废，重置握手并整体重建。
-        // 若此刻 openConversation 正在进行，则挂起重待办，等它完成后再重建。
+        // 桥接在 openConversation 进行中时恢复：挂起重待办，等它完成后再重建。
+        // 注意：正常路径下 rebuildSubscriptions 由 ZemoteClient.recoverActiveBridges 直接调用；
+        // 此处仅作兜底，防止 openConversation 中途遭遇 bridge 恢复时漏掉重建。
         sessionScope.launch {
             bridge.recovered.collect { count ->
                 if (count <= 0 || bridge.isDisposed) return@collect
-                if (opening) {
-                    rebuildPending = true
-                    log("[v4] bridge recovered during open, rebuild deferred")
-                    return@collect
-                }
-                rebuildSubscriptions()
+                if (!opening) return@collect
+                rebuildPending = true
+                log("[v4] bridge recovered during open, rebuild deferred")
             }
         }
     }
 
-    private suspend fun rebuildSubscriptions() {
+    /** 由 [ZemoteClient.recoverActiveBridges] 在桥接恢复成功后调用，重建握手和所有订阅。 */
+    suspend fun rebuildSubscriptions() {
         if (rebuilding) return
         rebuilding = true
         try {

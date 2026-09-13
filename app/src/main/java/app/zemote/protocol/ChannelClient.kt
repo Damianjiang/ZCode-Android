@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeoutException
@@ -108,6 +109,7 @@ class ChannelClient(
     private suspend fun awaitReady(timeoutMs: Long = 30_000L) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!initialized) {
+            if (!scope.isActive) return
             if (System.currentTimeMillis() >= deadline) {
                 throw TimeoutException("channel init timeout (no Initialize frame from desktop)")
             }
