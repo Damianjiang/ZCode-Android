@@ -337,7 +337,8 @@ fun ChatScreen(
 
         if (sessionId != null) {
             delay(4000)
-            val nothingLoaded = opened.rows.value.isEmpty() || opened.modelOptions.value.isEmpty()
+            // 只用 rows 是否为空判断重建（模型选项是次要的，没有模型也可以看历史）
+            val nothingLoaded = opened.rows.value.isEmpty()
             if (nothingLoaded) {
                 session.closeConversation(accountId, workspaceKey)
                 repo = null

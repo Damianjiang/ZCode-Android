@@ -1088,9 +1088,11 @@ class ConversationV4Session private constructor(
             channels.call(ChannelClient.Channel.ZCODE_TASK, "prepareWorkspace", listOf(scope()))
         }.getOrNull() as? Map<*, *> ?: return@withContext false
         val options = res["configOptions"] as? List<*> ?: return@withContext false
+        log("[v4] prepareWorkspace: got ${options.size} configOptions entries")
         for (raw in options) {
             val o = raw as? Map<*, *> ?: continue
-            when (o["id"]?.toString()) {
+            val type = (o["id"] as? String) ?: (o["category"] as? String) ?: continue
+            when (type) {
                 "model" -> {
                     val parsed = (o["options"] as? List<*>).orEmpty().mapNotNull { v ->
                         val vm = v as? Map<*, *> ?: return@mapNotNull null
@@ -1100,6 +1102,7 @@ class ConversationV4Session private constructor(
                         val model = if (slash <= 0) value else value.substring(slash + 1)
                         ModelOption(provider = provider, model = model, label = vm["name"]?.toString()?.ifBlank { null } ?: model)
                     }
+                    log("[v4] prepareWorkspace: parsed ${parsed.size} model options")
                     if (parsed.isNotEmpty()) _modelOptions.value = parsed
                 }
                 "thought_level" -> {
@@ -1112,6 +1115,7 @@ class ConversationV4Session private constructor(
                         _convConfig.update { it?.copy(thoughtLevels = it.thoughtLevels.ifEmpty { levels }) }
                     }
                 }
+                else -> log("[v4] prepareWorkspace: unknown config type '$type'")
             }
         }
         true
