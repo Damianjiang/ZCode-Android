@@ -276,7 +276,7 @@ fun ChatScreen(
     sessionId: String?,
     session: AppSessionViewModel,
     onBack: () -> Unit,
-    onOpenSubagent: (String, String) -> Unit = { _, _ -> },
+    onOpenSubagent: (String, String, String) -> Unit = { _, _, _ -> },
     readOnly: Boolean = false,
 ) {
     val accountId = session.activeId
@@ -510,20 +510,20 @@ fun ChatScreen(
                             is DisplayItem.Single -> {
                                 if (item.row.kind == ConvKinds.USER_INPUT) {
                                     TimelineRow(item.row, loadAttachment, onOpenSubagent = { row ->
-                                        row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid) }
+                                        row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") }
                                     })
                                 } else {
                                     // AI 产生的内容淡入，更灵动
                                     FadeInContainer(item.key) {
                                         TimelineRow(item.row, loadAttachment, onOpenSubagent = { row ->
-                                            row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid) }
+                                            row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") }
                                         })
                                     }
                                 }
                             }
                             is DisplayItem.ToolGroup -> FadeInContainer(item.key) {
                                 ToolGroupCard(item.rows, onOpenSubagent = { row ->
-                                    row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid) }
+                                    row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") }
                                 })
                             }
                         }

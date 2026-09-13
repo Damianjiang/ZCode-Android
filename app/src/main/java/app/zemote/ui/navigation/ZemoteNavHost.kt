@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -22,6 +23,7 @@ import app.zemote.ui.screens.MainShellScreen
 import app.zemote.ui.screens.PersonalizeScreen
 import app.zemote.ui.screens.TasksScreen
 import app.zemote.ui.theme.ThemeManager
+import kotlinx.coroutines.launch
 
 /**
  * M3「Fade Through」转场：新页面淡入 + 轻微放大，旧页面快速淡出。
@@ -51,8 +53,9 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat/{workspaceKey}/{sessionId}") {
         fun createRoute(workspaceKey: String, sessionId: String) = "chat/$workspaceKey/$sessionId"
     }
-    object Subagent : Screen("subagent/{workspaceKey}/{childSessionId}") {
-        fun createRoute(workspaceKey: String, childSessionId: String) = "subagent/$workspaceKey/$childSessionId"
+    object Subagent : Screen("subagent/{workspaceKey}/{childSessionId}/{parentSessionId}") {
+        fun createRoute(workspaceKey: String, childSessionId: String, parentSessionId: String) =
+            "subagent/$workspaceKey/$childSessionId/$parentSessionId"
     }
 }
 
@@ -138,19 +141,35 @@ fun ZemoteNavHost(
                 sessionId = sessionId,
                 session = sessionViewModel,
                 onBack = { navController.popBackStack() },
-                onOpenSubagent = { wk, cid ->
-                    navController.navigate(Screen.Subagent.createRoute(wk, cid))
+                onOpenSubagent = { wk, cid, pid ->
+                    navController.navigate(Screen.Subagent.createRoute(wk, cid, pid))
                 },
             )
         }
         composable(Screen.Subagent.route) { backStackEntry ->
             val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
             val childSessionId = backStackEntry.arguments?.getString("childSessionId") ?: return@composable
+            val parentSessionId = backStackEntry.arguments?.getString("parentSessionId")
+            val scope = rememberCoroutineScope()
             ChatScreen(
                 workspaceKey = workspaceKey,
                 sessionId = childSessionId,
                 session = sessionViewModel,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    // 回退时强制恢复父会话（同 bridge，切换 active session）
+                    if (parentSessionId != null) {
+                        val acc = sessionViewModel.activeId
+                        if (acc != null) {
+                            scope.launch {
+                                runCatching {
+                                    sessionViewModel.conversationFor(acc, workspaceKey)
+                                        ?.openConversation(parentSessionId, force = true)
+                                }
+                            }
+                        }
+                    }
+                    navController.popBackStack()
+                },
                 readOnly = true,
             )
         }

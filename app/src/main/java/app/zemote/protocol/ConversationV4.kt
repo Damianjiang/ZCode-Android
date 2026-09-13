@@ -359,8 +359,8 @@ class ConversationV4Session private constructor(
      * 订阅指定会话并拉取历史。必须在 IO 线程调用（Compose 的
      * AndroidUiDispatcher 在静态界面不产生帧，withTimeout 会被饿死）。
      */
-    suspend fun openConversation(sessionId: String?) = withContext(Dispatchers.IO) {
-        if (_activeSessionId.value == sessionId && _rows.value.isNotEmpty()) return@withContext
+    suspend fun openConversation(sessionId: String?, force: Boolean = false) = withContext(Dispatchers.IO) {
+        if (!force && _activeSessionId.value == sessionId && _rows.value.isNotEmpty()) return@withContext
         opening = true
         try {
             openConversationInternal(sessionId)
