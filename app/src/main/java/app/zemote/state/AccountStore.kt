@@ -5,12 +5,12 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import app.zemote.protocol.ZemoteConnectionParams
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.update
 import java.util.UUID
 
@@ -39,9 +39,6 @@ class AccountStore(
 
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
     val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
-
-    /** 兼容旧调用的流别名 */
-    val accountsFlow: Flow<List<Account>> get() = accounts
 
     /** 从 DataStore 载入设备列表（应用启动时调用一次） */
     suspend fun load() {
@@ -125,15 +122,15 @@ class AccountStore(
         return added
     }
 
-    private suspend fun readFromDataStore(): List<Account> {
-        val raw = dataStore.data.first()[ACCOUNTS_KEY] ?: return emptyList()
+    private suspend fun readFromDataStore(): List<Account> = withContext(Dispatchers.IO) {
+        val raw = dataStore.data.first()[ACCOUNTS_KEY] ?: return@withContext emptyList()
         val listType = object : com.google.gson.reflect.TypeToken<List<Map<String, Any?>>>() {}.type
         val list = try {
-            gson.fromJson<List<Map<String, Any?>>>(raw, listType) ?: return emptyList()
+            gson.fromJson<List<Map<String, Any?>>>(raw, listType) ?: return@withContext emptyList()
         } catch (_: Exception) {
-            return emptyList()
+            return@withContext emptyList()
         }
-        return list.mapNotNull { item ->
+        list.mapNotNull { item ->
             @Suppress("UNCHECKED_CAST")
             val map = item as? Map<String, Any> ?: return@mapNotNull null
             val encUrl = map["url"] as? String ?: return@mapNotNull null
@@ -151,7 +148,7 @@ class AccountStore(
         }
     }
 
-    private suspend fun persist() {
+    private suspend fun persist() = withContext(Dispatchers.IO) {
         val entries = _accounts.value.map { a ->
             val encUrl = CredentialCipher.encrypt(a.url) ?: a.url
             mapOf(

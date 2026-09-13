@@ -148,21 +148,3 @@ fun decodeValue(r: ValueReader): Any? {
     }
 }
 
-/**
- * 13-byte IPC framing header: [type:u8][id:u32be][ack:u32be][bodyLen:u32be]
- * Mirrors `Mne()` / `Nne` in the web client.
- */
-object IpcFraming {
-    const val TYPE_REGULAR = 1
-
-    fun encode(body: ByteArray): ByteArray {
-        val out = ByteArray(13 + body.size)
-        val view = java.nio.ByteBuffer.wrap(out)
-        view.put(TYPE_REGULAR.toByte())
-        view.putInt(0)  // id
-        view.putInt(0)  // ack
-        view.putInt(body.size)
-        view.put(body)
-        return out
-    }
-}

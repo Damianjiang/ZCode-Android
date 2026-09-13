@@ -153,7 +153,7 @@ fun TasksScreen(
         // 订阅工作区 sessions-index：会话列表实时更新（新增/标题/运行状态），
         // 与 bootstrap 任务按 sessionId 合并（对齐原版 Flutter 双数据源）
         runCatching {
-            val repo = session.conversationFor(accountId, workspaceKey, null) ?: return@runCatching
+            val repo = session.conversationFor(accountId, workspaceKey) ?: return@runCatching
             repo.openSessionsIndex()
             repo.sessionEntries.collect { entries ->
                 if (entries.isEmpty()) return@collect
@@ -287,7 +287,6 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val context = LocalContext.current
-    var rebuildKey by remember { mutableStateOf(0) }
 
     // 系统文件选择器：图片和任意文件均可选，选中即加入待发列表
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -314,7 +313,7 @@ fun ChatScreen(
 
     // 打开会话（含自愈）：设备未就绪重试 → 打开 → 若 4 秒后历史/模型仍为空，
     // 说明这条桥在服务端已失效（如被抢占后遗留），销毁重建整条通道再试一次
-    LaunchedEffect(accountId, workspaceKey, sessionId, rebuildKey) {
+    LaunchedEffect(accountId, workspaceKey, sessionId) {
         if (accountId == null) {
             error = deviceNotConnectedText
             return@LaunchedEffect
@@ -322,7 +321,7 @@ fun ChatScreen(
         // 快速进入时设备可能仍在重连（connections 里还没有 client），有限次重试而不是永久空白
         var opened: app.zemote.protocol.ConversationV4Session? = null
         for (attempt in 1..5) {
-            opened = runCatching { session.conversationFor(accountId, workspaceKey, sessionId) }
+            opened = runCatching { session.conversationFor(accountId, workspaceKey) }
                 .getOrNull()
             if (opened != null) break
             delay(1500)
@@ -340,7 +339,7 @@ fun ChatScreen(
             if (nothingLoaded) {
                 session.closeConversation(accountId, workspaceKey)
                 repo = null
-                opened = runCatching { session.conversationFor(accountId, workspaceKey, sessionId) }
+                opened = runCatching { session.conversationFor(accountId, workspaceKey) }
                     .getOrNull()
                 if (opened != null) {
                     repo = opened

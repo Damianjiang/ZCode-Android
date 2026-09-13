@@ -177,14 +177,13 @@ class ConversationV4Session private constructor(
             "pauseGoal", "resumeGoal",
         )
 
-        /** 打开 workspace bridge（可绑定 taskId）并创建会话仓库。 */
+        /** 打开 workspace bridge 并创建会话仓库（单工作区单桥，订阅在仓库内按需切换）。 */
         suspend fun open(
             client: ZemoteClient,
             workspaceKey: String,
-            taskId: String? = null,
             scopeParams: Map<String, Any>? = null,
         ): ConversationV4Session = withContext(Dispatchers.IO) {
-            val bridge = client.openBridge(workspaceKey, taskId)
+            val bridge = client.openBridge(workspaceKey)
             ConversationV4Session(client, bridge, workspaceKey, scopeParams)
         }
     }

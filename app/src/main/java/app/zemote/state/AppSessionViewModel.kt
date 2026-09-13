@@ -74,7 +74,7 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
      * 这条桥。若按任务各开各的桥，桌面端"后者顶掉前者"会导致两条桥互相
      * 踢，表现就是数据时有时无（对齐官方 Web 的单桥多订阅架构）。
      */
-    suspend fun conversationFor(accountId: String, workspaceKey: String, taskId: String?): ConversationV4Session? {
+    suspend fun conversationFor(accountId: String, workspaceKey: String): ConversationV4Session? {
         val client = connections[accountId] ?: return null
         val key = "$accountId|$workspaceKey"
 
@@ -90,7 +90,7 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
                 synchronized(conversationsLock) { conversations.remove(key) }
             }
             val scopeParams = workspaceMaps["${accountId}|${workspaceKey}"]
-            val repo = ConversationV4Session.open(client, workspaceKey, null, scopeParams)
+            val repo = ConversationV4Session.open(client, workspaceKey, scopeParams)
             synchronized(conversationsLock) {
                 conversations[key] = repo
                 // 淘汰该设备最久未用、超出上限的仓库（dispose 会关掉 bridge 与订阅）
