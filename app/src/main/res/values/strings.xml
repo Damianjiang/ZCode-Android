@@ -119,7 +119,6 @@
     <string name="connect_your_desktop">连接你的桌面 ZCode</string>
     <string name="device_added">设备已添加</string>
     <string name="no_devices_yet">还没有设备</string>
-    <string name="no_devices_hint">把桌面 ZCode 的远程控制链接粘贴进来，\n或扫描配对二维码，随时随地去连。</string>
     <string name="add_first_device">添加第一台设备</string>
     <string name="connect">连接</string>
     <string name="more">更多</string>
@@ -167,7 +166,6 @@
     <string name="thinking_ellipsis">思考中…</string>
     <string name="thinking_label">思考</string>
     <string name="unnamed_session">未命名会话</string>
-    <string name="unnamed_device">未命名设备</string>
     <string name="connecting">正在连接…</string>
     <string name="not_connected">未连接</string>
     <string name="brand_iris">鸢尾</string>
@@ -183,5 +181,4 @@
     <string name="keepalive_title">已连接「%1$s」</string>
     <string name="keepalive_text">会话保活中，保持与桌面端的连接</string>
     <string name="subagent_open">查看子智能体</string>
-    <string name="subagent_session">子智能体会话</string>
 </resources>

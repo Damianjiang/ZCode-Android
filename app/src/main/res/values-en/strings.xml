@@ -119,7 +119,6 @@
     <string name="connect_your_desktop">Connect your desktop ZCode</string>
     <string name="device_added">Device added</string>
     <string name="no_devices_yet">No devices yet</string>
-    <string name="no_devices_hint">Paste the remote control link from desktop ZCode,\nor scan the pairing QR code, and connect from anywhere.</string>
     <string name="add_first_device">Add your first device</string>
     <string name="connect">Connect</string>
     <string name="more">More</string>
@@ -167,7 +166,6 @@
     <string name="thinking_ellipsis">Thinking…</string>
     <string name="thinking_label">Thinking</string>
     <string name="unnamed_session">Unnamed session</string>
-    <string name="unnamed_device">Unnamed device</string>
     <string name="connecting">Connecting…</string>
     <string name="not_connected">Offline</string>
     <string name="brand_iris">Iris</string>
@@ -183,5 +181,4 @@
     <string name="keepalive_title">Connected to "%1$s"</string>
     <string name="keepalive_text">Keeping the connection to your desktop alive</string>
     <string name="subagent_open">View subagent</string>
-    <string name="subagent_session">Subagent session</string>
 </resources>
