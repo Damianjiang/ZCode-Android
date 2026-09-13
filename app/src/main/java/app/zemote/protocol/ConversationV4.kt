@@ -881,7 +881,14 @@ class ConversationV4Session private constructor(
             "uploadId" to uploadId,
             "sessionId" to sessionId,
         )
-        val startedAt = System.currentTimeMillis()
+        // 官方 TTe: s = {...t, sessionId, uploadId} — abort 时使用 base params
+        val abortParams = scope() + mapOf(
+            "sessionId" to sessionId,
+            "uploadId" to uploadId,
+        )
+        var committed = false
+        try {
+            val startedAt = System.currentTimeMillis()
         log("[v4] attachmentPut begin: $fileName ${bytes.size}B chunks=$totalChunks")
         val beginRes = call(
             "attachmentBeginV4",
@@ -925,7 +932,17 @@ class ConversationV4Session private constructor(
         onProgress?.invoke(1f)
         val commitRes = call("attachmentCommitV4", listOf(scope() + base), timeoutMs = 60_000, isActiveCheck = { sessionScope.isActive }) as? Map<*, *>
         log("[v4] attachmentPut committed $fileName in ${System.currentTimeMillis() - startedAt}ms ref=${commitRes?.get("ref")}")
+        committed = true
         AttachmentUpload(commitRes?.get("ref")?.toString(), fileName, mime, bytes.size.toLong())
+        } catch (e: Exception) {
+            // 官方模式: if(u) try{await e.attachmentAbortV4(s)}catch...throw t
+            if (!committed) {
+                runCatching {
+                    call("attachmentAbortV4", listOf(abortParams), isActiveCheck = { sessionScope.isActive })
+                }.onFailure { log("[v4] attachmentAbortV4 failed: $it") }
+            }
+            throw e
+        }
     }
 
     /** 读取附件内容（图片预览），分片拉取拼接 */
