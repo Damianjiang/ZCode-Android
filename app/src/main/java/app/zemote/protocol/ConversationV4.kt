@@ -407,6 +407,7 @@ class ConversationV4Session private constructor(
                 _loading.value = true
                 runCatching { ensureHandshake() }
                     .onFailure { log("[v4] handshake failed: $it") }
+                if (!sessionScope.isActive) return@withTimeout
                 // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开；
                 // 首次拿到空结果时自动重试一次（桌面端冷启动时可能返回空）
                 sessionScope.launch {
@@ -456,11 +457,12 @@ class ConversationV4Session private constructor(
         // 注册后立即保存 listener，无论 subscribeConversationV4 成功或失败都能正确清理
         convCancel = listener
         // 桌面端可能需要预热会话运行时，订阅要给足超时（官方 60s）
-        val ack = runCatching {
+        val callResult = runCatching {
             call("subscribeConversationV4", listOf(scope() + mapOf("sessionId" to sessionId)), timeoutMs = 60_000)
-        }.getOrNull()?.let { res ->
-            (res as? Map<*, *>)?.get("ack") as? Map<*, *>
-        }
+        }.getOrNull()
+        // scope 已取消（页面离开等）→ 静默退出，不打印噪声日志
+        if (callResult == null) { convCancel?.invoke(); convCancel = null; return }
+        val ack = (callResult as? Map<*, *>)?.get("ack") as? Map<*, *>
         convSubId = ack?.get("subscriptionId")?.toString()
         ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
         if (convSubId == null) {
@@ -1132,7 +1134,7 @@ class ConversationV4Session private constructor(
                         _convConfig.update { it?.copy(thoughtLevels = it.thoughtLevels.ifEmpty { levels }) }
                     }
                 }
-                else -> log("[v4] prepareWorkspace: unknown config type '$type'")
+                else -> Unit // mode / 其他未实现类型，忽略不打印日志
             }
         }
         true
@@ -1145,6 +1147,7 @@ class ConversationV4Session private constructor(
         if (siSubId != null) return@withContext
         runCatching { ensureHandshake() }
             .onFailure { log("[v4-si] handshake failed: $it"); return@withContext }
+        if (!sessionScope.isActive) return@withContext
         siCancel = channels.addEventListener(
             ChannelClient.Channel.ZCODE_AGENT,
             "onDynamicSessionsIndexFrame",
@@ -1158,6 +1161,8 @@ class ConversationV4Session private constructor(
                 timeoutMs = 60_000,
             )
         }.getOrNull()
+        // scope 已取消 → 静默退出
+        if (res == null) { siCancel?.invoke(); siCancel = null; return@withContext }
         val ack = (res as? Map<*, *>)?.get("ack") as? Map<*, *>
         siSubId = ack?.get("subscriptionId")?.toString()
         ack?.get("logEpoch")?.toString()?.let { siLogEpoch = it }
