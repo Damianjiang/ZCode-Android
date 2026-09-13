@@ -10,6 +10,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Channel RPC client mirroring the web client's Pne.
@@ -160,8 +161,7 @@ class ChannelClient(
         arg: Any? = null,
     ): () -> Unit {
         val id = lastRequestId++
-        var sent = false
-        var cancelled = false
+        val cancelled = AtomicBoolean(false)
         eventHandlers[id] = onEvent
         // 等桌面端 Initialize 到达后再发注册请求（先发的注册会被静默丢弃）
         scope.launch {
@@ -172,8 +172,11 @@ class ChannelClient(
                 eventHandlers.remove(id)
                 return@launch
             }
-            if (cancelled || sent) return@launch
-            sent = true
+            if (cancelled.get()) {
+                eventHandlers.remove(id)
+                return@launch
+            }
+            cancelled.set(true) // 原子标记"已发送"，防止 cancel() 与本文之间出现竞态
             onLog?.invoke("[ipc] listen ${channel.channelName}.$event id=$id")
             val writer = ValueWriter()
             encodeValue(writer, listOf(REQ_EVENT_LISTEN, id, channel.channelName, event))
@@ -181,9 +184,9 @@ class ChannelClient(
             sendBody(writer.toByteArray())
         }
         return {
-            cancelled = true
+            cancelled.set(true)
             eventHandlers.remove(id)
-            if (sent) {
+            if (cancelled.get()) { // 已发送过 LISTEN → 需要发 DISPOSE 通知桌面端
                 val writer = ValueWriter()
                 encodeValue(writer, listOf(REQ_EVENT_DISPOSE, id, channel.channelName, event))
                 encodeValue(writer, null)
