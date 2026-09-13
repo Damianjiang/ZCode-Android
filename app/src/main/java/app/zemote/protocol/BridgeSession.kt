@@ -86,6 +86,8 @@ class BridgeSession(
         _transport.onMessage = { frame -> _channels.handleMessage(frame) }
         // Start fresh listener for the new bridge session
         startRelayListener()
+        // 通知拥有此 bridge 的会话：bridge 已更换，需要重置内部状态（resyncing 等）
+        // 由调用方负责：恢复后打开会话时会触发 rebuildSubscriptions
     }
 
     val channelsClient: ChannelClient get() = _channels

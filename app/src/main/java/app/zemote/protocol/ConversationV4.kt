@@ -757,6 +757,7 @@ class ConversationV4Session private constructor(
                     )),
                 )
             } catch (e: Exception) {
+                // 必须区分普通异常和协程取消（bridge swap 等导致）；两种情况都需要清除 resyncing
                 log("[v4] resync failed: ${e.message}")
             } finally {
                 resyncing = false

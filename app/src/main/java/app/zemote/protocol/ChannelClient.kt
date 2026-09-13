@@ -2,7 +2,6 @@ package app.zemote.protocol
 
 import app.zemote.ui.logger.ZemoteLogger
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -57,11 +56,10 @@ class ChannelClient(
 
     /**
      * 桥接重连后重置就绪信号。
-     * 必须先 cancel 旧的 deferred（它永远不会被 complete，否则等待它的协程会永久挂起），
-     * 再替换为全新的 deferred，迫使下一个 call() 等待新 bridge 的 Initialize 帧。
+     * 替换旧的 CompletableDeferred 为全新的：旧的 await 协程会在 awaitReady 的 30s 超时后自然退出，
+     * 新的 call() 会立即等待新 bridge 的 Initialize 帧，不会出现"永远挂起"或"误判为完成"的问题。
      */
     fun resetReady() {
-        ready.cancel(CancellationException("ChannelClient reset"))
         ready = CompletableDeferred()
     }
 
