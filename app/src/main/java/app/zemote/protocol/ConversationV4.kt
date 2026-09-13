@@ -1,5 +1,6 @@
 package app.zemote.protocol
 
+import app.zemote.ui.logger.ZemoteLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -361,6 +362,7 @@ class ConversationV4Session private constructor(
      */
     suspend fun openConversation(sessionId: String?, force: Boolean = false) = withContext(Dispatchers.IO) {
         if (!force && _activeSessionId.value == sessionId && _rows.value.isNotEmpty()) return@withContext
+        ZemoteLogger.info("v4", "openConversation${if (force) " [force]" else ""} sessionId=$sessionId")
         opening = true
         try {
             openConversationInternal(sessionId)
@@ -800,6 +802,7 @@ class ConversationV4Session private constructor(
             ))
             target = extractNewSessionId(res) ?: return@withContext null
             _activeSessionId.value = target
+            ZemoteLogger.action("创建新会话: $target")
             runCatching { subscribeConversation(target) }
                 .onFailure { log("[v4] subscribe(new) failed: $it") }
         } else {
@@ -808,6 +811,7 @@ class ConversationV4Session private constructor(
                 put("text", trimmed)
                 if (!attachments.isNullOrEmpty()) put("attachments", attachments)
             }
+            ZemoteLogger.info("v4", "发送消息: ${trimmed.take(60)}${if (trimmed.length > 60) "…" else ""} 会话=$target")
             sendCommand(target, "sendText", payload)
         }
         target
@@ -818,6 +822,7 @@ class ConversationV4Session private constructor(
      * 带附件的新会话走：createSession → attachmentPut → sendText（对齐官方路径）。
      */
     suspend fun createSession(): String? = withContext(Dispatchers.IO) {
+        ZemoteLogger.action("创建空白会话 (workspace=$workspaceKey)")
         val res = sendCommand(null, "createSession", mapOf("workspaceId" to workspaceKey))
         extractNewSessionId(res)?.also {
             _activeSessionId.value = it

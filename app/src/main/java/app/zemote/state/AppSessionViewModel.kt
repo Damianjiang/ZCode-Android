@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.zemote.service.KeepAliveService
 import app.zemote.protocol.ConversationV4Session
 import app.zemote.protocol.ZemoteClient
+import app.zemote.ui.logger.ZemoteLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -151,7 +152,10 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
                     setStatus(account.id, DeviceStatus(ConnectionState.ERROR, "Cannot parse pairing URL (sid/hash/t required)"))
                     return@withLock
                 }
-                val client = ZemoteClient(params, onLog = { msg -> android.util.Log.d("Zemote", msg) })
+                val client = ZemoteClient(params, onLog = { msg ->
+                        android.util.Log.d("Zemote", msg)
+                        ZemoteLogger.info("protocol", msg)
+                    })
                 try {
                     client.connect()
                     client.waitPaired(timeoutMs = 90_000L)

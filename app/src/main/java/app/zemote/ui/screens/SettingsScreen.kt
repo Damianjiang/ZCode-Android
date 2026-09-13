@@ -8,6 +8,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import app.zemote.R
+import app.zemote.ui.logger.ZemoteLogger
 import app.zemote.state.LanguagePrefs
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
@@ -30,6 +31,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -53,6 +57,7 @@ import app.zemote.ui.theme.ThemeManager
 fun SettingsScreen(
     onOpenPersonalize: () -> Unit = {},
     onOpenChangelog: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -81,6 +86,7 @@ fun SettingsScreen(
                 LanguagePrefs.EN -> stringResource(R.string.lang_english)
                 else -> stringResource(R.string.lang_follow_system)
             }
+            var debugLogEnabled by remember { mutableStateOf(true) }
             var showLangDialog by remember { mutableStateOf(false) }
 
             SectionLabel(stringResource(R.string.section_appearance))
@@ -101,6 +107,27 @@ fun SettingsScreen(
                 )
             }
 
+            SectionLabel(stringResource(R.string.section_debug))
+            SettingsCard {
+                Column {
+                    SettingRow(
+                        icon = Icons.Rounded.BugReport,
+                        title = stringResource(R.string.debug_logs),
+                        subtitle = if (debugLogEnabled) stringResource(R.string.debug_logs_on) else stringResource(R.string.debug_logs_off),
+                        onClick = { debugLogEnabled = !debugLogEnabled; ZemoteLogger.enabled = debugLogEnabled },
+                        trailing = { Switch(checked = debugLogEnabled, onCheckedChange = { debugLogEnabled = it; ZemoteLogger.enabled = it }) },
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.debug_logs_view),
+                        subtitle = stringResource(R.string.debug_logs_view_sub),
+                        onClick = onOpenLogs,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                }
+            }
+
             SectionLabel(stringResource(R.string.section_about))
             SettingsCard {
                 Column {
@@ -115,6 +142,13 @@ fun SettingsScreen(
                         title = stringResource(R.string.changelog),
                         subtitle = stringResource(R.string.changelog_sub),
                         onClick = onOpenChangelog,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.BugReport,
+                        title = stringResource(R.string.debug_logs),
+                        subtitle = stringResource(R.string.debug_logs_sub),
+                        onClick = onOpenLogs,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                     )
                 }

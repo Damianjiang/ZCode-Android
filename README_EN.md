@@ -44,8 +44,9 @@ implementation.
   drag-to-reorder
 - Model / thinking-level switching and context usage display
 - Dark mode and dynamic color (Android 12+)
-- Foreground keep-alive service: an ongoing notification while connected reduces
-  background disconnections
+- Foreground keep-alive service: an ongoing notification while connected reduces background disconnections
+- **Subagents**: "View subagent" button inside tool call cards; opens a read-only sub-session page, restores parent on back
+- **Debug Logs**: Settings → Debug → View Logs records all protocol requests/responses and user actions, one-tap copy for sharing
 - In-app language: follow system / 中文 / English
 
 ## Build

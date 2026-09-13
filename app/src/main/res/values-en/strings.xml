@@ -7,6 +7,7 @@
     <string name="personalize">Personalization</string>
     <string name="personalize_sub">Theme color, light/dark mode, dynamic color</string>
     <string name="section_about">About</string>
+    <string name="section_debug">Debug</string>
     <string name="version_label">Version</string>
     <string name="changelog">What\'s new</string>
     <string name="changelog_sub">Release notes for each version</string>
@@ -181,4 +182,16 @@
     <string name="keepalive_title">Connected to "%1$s"</string>
     <string name="keepalive_text">Keeping the connection to your desktop alive</string>
     <string name="subagent_open">View subagent</string>
+    <string name="logs_title">Debug Logs</string>
+    <string name="logs_empty">No logs yet</string>
+    <string name="logs_count">%d log entries</string>
+    <string name="logs_empty_desc">Logs will appear here after connecting to your desktop and generating activity</string>
+    <string name="logs_copied">Logs copied to clipboard</string>
+    <string name="logs_cleared">Logs cleared</string>
+    <string name="debug_logs">Debug Logs</string>
+    <string name="debug_logs_sub">View protocol-layer logs for troubleshooting</string>
+    <string name="debug_logs_on">On</string>
+    <string name="debug_logs_off">Off</string>
+    <string name="debug_logs_view">View Logs</string>
+    <string name="debug_logs_view_sub">Records requests/responses/actions, copy to share with developers</string>
 </resources>

@@ -49,6 +49,14 @@ private data class ChangelogEntry(
 
 private val Changelogs = listOf(
     ChangelogEntry(
+        "v1.7.0", "2026-09-13",
+        listOf(
+            "新增子智能体功能：工具调用卡片显示「查看子智能体」按钮，点击进入只读子会话，返回自动恢复父会话",
+            "新增调试日志页：设置 → 调试 → 查看日志，记录所有协议请求/响应及用户操作，支持一键复制；可在设置中开关日志记录",
+            "修复 prepareWorkspace 模型选项无法加载的问题（兼容服务端新格式），消除模型为空导致的加载死循环",
+        ),
+    ),
+    ChangelogEntry(
         "v1.6.0", "2026-09-13",
         listOf(
             "进入应用自动申请所需权限（相机），扫码配对即点即用",

@@ -18,6 +18,7 @@ import app.zemote.state.AppSessionViewModel
 import app.zemote.ui.screens.AccountsScreen
 import app.zemote.ui.screens.ChatScreen
 import app.zemote.ui.screens.ChangelogScreen
+import app.zemote.ui.screens.LogScreen
 import app.zemote.ui.screens.MainScreen
 import app.zemote.ui.screens.MainShellScreen
 import app.zemote.ui.screens.PersonalizeScreen
@@ -43,6 +44,7 @@ sealed class Screen(val route: String) {
     object Main : Screen("main")
     object Personalize : Screen("personalize")
     object Changelog : Screen("changelog")
+    object Log : Screen("log")
     object QrScan : Screen("qr_scan")
     object MainShell : Screen("main_shell/{accountId}") {
         fun createRoute(accountId: String) = "main_shell/$accountId"
@@ -84,6 +86,7 @@ fun ZemoteNavHost(
                 },
                 onOpenPersonalize = { navController.navigate(Screen.Personalize.route) },
                 onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
+                onOpenLogs = { navController.navigate(Screen.Log.route) },
                 onScan = { navController.navigate(Screen.QrScan.route) },
             )
         }
@@ -101,6 +104,9 @@ fun ZemoteNavHost(
         }
         composable(Screen.Changelog.route) {
             ChangelogScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.Log.route) {
+            LogScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.MainShell.route) { backStackEntry ->
             val accountId = backStackEntry.arguments?.getString("accountId") ?: return@composable

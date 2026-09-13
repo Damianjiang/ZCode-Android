@@ -1,5 +1,6 @@
 package app.zemote.protocol
 
+import app.zemote.ui.logger.ZemoteLogger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -117,6 +118,7 @@ class ChannelClient(
         encodeValue(writer, listOf(REQ_PROMISE, id, channel.channelName, method))
         encodeValue(writer, args)
         sendBody(writer.toByteArray())
+        ZemoteLogger.info("ipc", "→ ${channel.channelName}.$method id=$id")
         val (resType, data) = try {
             kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -128,6 +130,7 @@ class ChannelClient(
             onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
             throw TimeoutException("${channel.channelName}.$method timed out")
         }
+        ZemoteLogger.info("ipc", "← ${channel.channelName}.$method id=$id type=$resType")
         return when (resType) {
             RES_PROMISE_SUCCESS -> data
             RES_PROMISE_ERROR, RES_PROMISE_ERROR_OBJ -> throw ChannelRpcError(data?.toString() ?: "unknown error", data)

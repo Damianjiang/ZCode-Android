@@ -7,6 +7,7 @@
     <string name="personalize">个性化</string>
     <string name="personalize_sub">主题颜色、亮暗模式、动态取色</string>
     <string name="section_about">关于</string>
+    <string name="section_debug">调试</string>
     <string name="version_label">版本</string>
     <string name="changelog">更新日志</string>
     <string name="changelog_sub">查看各版本的更新内容</string>
@@ -181,4 +182,16 @@
     <string name="keepalive_title">已连接「%1$s」</string>
     <string name="keepalive_text">会话保活中，保持与桌面端的连接</string>
     <string name="subagent_open">查看子智能体</string>
+    <string name="logs_title">调试日志</string>
+    <string name="logs_empty">暂无日志</string>
+    <string name="logs_count">%d 条日志</string>
+    <string name="logs_empty_desc">连接设备并产生交互后，日志将在此显示</string>
+    <string name="logs_copied">日志已复制到剪贴板</string>
+    <string name="logs_cleared">日志已清空</string>
+    <string name="debug_logs">调试日志</string>
+    <string name="debug_logs_sub">查看协议层运行日志，方便反馈问题</string>
+    <string name="debug_logs_on">已开启</string>
+    <string name="debug_logs_off">已关闭</string>
+    <string name="debug_logs_view">查看日志</string>
+    <string name="debug_logs_view_sub">记录请求/响应/操作，点击复制给开发者</string>
 </resources>

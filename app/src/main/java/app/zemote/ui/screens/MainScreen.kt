@@ -55,6 +55,7 @@ fun MainScreen(
     onNavigateToShell: (Account) -> Unit,
     onOpenPersonalize: () -> Unit,
     onOpenChangelog: () -> Unit,
+    onOpenLogs: () -> Unit = {},
     onScan: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -95,6 +96,7 @@ fun MainScreen(
                     else -> SettingsScreen(
                         onOpenPersonalize = onOpenPersonalize,
                         onOpenChangelog = onOpenChangelog,
+                        onOpenLogs = onOpenLogs,
                     )
                 }
             }
