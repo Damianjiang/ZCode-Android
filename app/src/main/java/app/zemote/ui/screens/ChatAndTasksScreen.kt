@@ -69,6 +69,7 @@ import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material.icons.rounded.Work
 import androidx.compose.material.icons.rounded.Cancel
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -87,6 +88,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -373,6 +375,8 @@ fun ChatScreen(
     val rows by (repo?.rows?.collectAsState() ?: remember { mutableStateOf(emptyList<ConvRow>()) })
     val working by (repo?.agentWorking?.collectAsState() ?: remember { mutableStateOf(false) })
     val loading by (repo?.loading?.collectAsState() ?: remember { mutableStateOf(false) })
+    // 有数据时立即停止显示加载动画，不论 loading 标志是否已清除
+    val hasRows = rows.isNotEmpty()
     val convConfig by (repo?.convConfig?.collectAsState() ?: remember { mutableStateOf(null) })
     val usage by (repo?.usage?.collectAsState() ?: remember { mutableStateOf(null) })
     val activeId by (repo?.activeSessionId?.collectAsState() ?: remember { mutableStateOf(sessionId) })
@@ -412,11 +416,21 @@ fun ChatScreen(
     val displayItems = remember(repo?.rowsVersion?.value ?: 0, slicedRows) { buildDisplayItems(slicedRows) }
 
     // 监听滚动位置，判断是否显示「回到最新消息」按钮
-    LaunchedEffect(listState) {
-        snapshotFlow {
+    val isFirstItemVisible by remember(listState) {
+        derivedStateOf {
             val info = listState.layoutInfo
-            info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) < info.totalItemsCount - 1
-        }.collect { atBottom -> showScrollToBottom = !atBottom }
+            info.totalItemsCount > 0 && info.visibleItemsInfo.firstOrNull()?.index == 0
+        }
+    }
+    val isLastItemVisible by remember(listState) {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 && info.visibleItemsInfo.lastOrNull()?.index == info.totalItemsCount - 1
+        }
+    }
+    // 当最后一项不可见时（用户上翻了），显示回到最新消息按钮
+    LaunchedEffect(isLastItemVisible, displayItems.isNotEmpty()) {
+        showScrollToBottom = !isLastItemVisible && displayItems.isNotEmpty()
     }
 
     // 新消息到达（条目数变化）：滚动定位到最新一条
@@ -529,7 +543,7 @@ fun ChatScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (loading && rows.isEmpty()) {
+                    if (loading && !hasRows) {
                         item {
                             Column(
                                 modifier = Modifier
@@ -616,14 +630,19 @@ fun ChatScreen(
                         FilledTonalIconButton(
                             onClick = {
                                 showScrollToBottom = false
-                                scope.launch { listState.animateScrollToItem(displayItems.lastIndex) }
+                                scope.launch {
+                                    val target = (displayItems.size - 1).coerceAtLeast(0)
+                                    if (target >= 0) {
+                                        listState.animateScrollToItem(target)
+                                    }
+                                }
                             },
                             modifier = Modifier.size(34.dp),
                         ) {
                             Icon(
-                                Icons.Rounded.ArrowDownward,
+                                Icons.Rounded.KeyboardArrowDown,
                                 contentDescription = stringResource(R.string.scroll_to_bottom),
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(22.dp),
                             )
                         }
                     }
