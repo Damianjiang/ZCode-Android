@@ -10,10 +10,14 @@ Kotlin + Jetpack Compose（Material 3）编写，全部代码为独立实现。
 📱 **在线预览**: [damianjiang.github.io/ZCode-Android](https://damianjiang.github.io/ZCode-Android)
 
 <p align="center">
-  <img src="screenshots/home_light.png" width="24%" alt="设备列表" />
-  <img src="screenshots/add_device_sheet.png" width="24%" alt="添加设备" />
-  <img src="screenshots/settings_light.png" width="24%" alt="设置页" />
-  <img src="screenshots/home_dark.png" width="24%" alt="深色模式" />
+  <img src="screenshots/step1_home.png" width="32%" alt="设备列表 - 连接桌面 ZCode" />
+  <img src="screenshots/step3_add_device.png" width="32%" alt="扫码添加设备" />
+  <img src="screenshots/step4_settings_page.png" width="32%" alt="设置与缓存管理" />
+</p>
+<p align="center">
+  <img src="screenshots/step5_settings_scroll.png" width="32%" alt="缓存清除" />
+  <img src="screenshots/home_dark.png" width="32%" alt="深色模式" />
+  <img src="screenshots/home_light.png" width="32%" alt="浅色模式" />
 </p>
 
 ## ⚠️ 免责声明

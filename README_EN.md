@@ -12,10 +12,14 @@ implementation.
 📱 **Live preview**: [damianjiang.github.io/ZCode-Android](https://damianjiang.github.io/ZCode-Android)
 
 <p align="center">
-  <img src="screenshots/home_light.png" width="24%" alt="Devices" />
-  <img src="screenshots/add_device_sheet.png" width="24%" alt="Add device" />
-  <img src="screenshots/settings_light.png" width="24%" alt="Settings" />
-  <img src="screenshots/home_dark.png" width="24%" alt="Dark mode" />
+  <img src="screenshots/step1_home.png" width="32%" alt="Device list - connect desktop ZCode" />
+  <img src="screenshots/step3_add_device.png" width="32%" alt="Add device via QR scan" />
+  <img src="screenshots/step4_settings_page.png" width="32%" alt="Settings and cache management" />
+</p>
+<p align="center">
+  <img src="screenshots/step5_settings_scroll.png" width="32%" alt="Cache clearing" />
+  <img src="screenshots/home_dark.png" width="32%" alt="Dark mode" />
+  <img src="screenshots/home_light.png" width="32%" alt="Light mode" />
 </p>
 
 ## ⚠️ Disclaimer
