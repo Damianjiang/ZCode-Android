@@ -77,6 +77,11 @@ object ZemoteLogger {
     }
 
     fun clear() {
-        synchronized(_lock) { _queue.clear(); _entries.value = emptyList() }
+        synchronized(_lock) {
+            _queue.clear()
+            val empty = emptyList<LogEntry>()
+            _entries.value = empty
+            _entriesFlow.value = empty
+        }
     }
 }

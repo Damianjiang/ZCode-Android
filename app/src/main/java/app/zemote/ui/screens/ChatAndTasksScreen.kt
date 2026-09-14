@@ -87,6 +87,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -107,6 +108,7 @@ import app.zemote.protocol.ConvKinds
 import app.zemote.protocol.ConvRow
 import app.zemote.protocol.TaskEntry
 import app.zemote.state.AppSessionViewModel
+import app.zemote.state.AppSettings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -383,11 +385,25 @@ fun ChatScreen(
 
     // 自动跟随开关：开启时新消息与流式增长都贴底，关闭后完全手动
     var autoFollow by remember { mutableStateOf(true) }
+    // 是否显示「回到最新消息」按钮：autoFollow 关闭且用户上翻时出现
+    var showScrollToBottom by remember { mutableStateOf(false) }
 
     // 工具调用行聚合：连续的 toolCall/subagent 合并为一张「执行过程」卡片，
     // 只显示执行了什么/修改了什么，不直接刷原始 toolcall
-    // 用 rowsVersion 作为 key，流式 delta 时 version 不变，避免每次字符追加都重建整个列表
-    val displayItems = remember(repo?.rowsVersion?.value ?: 0, rows) { buildDisplayItems(rows) }
+    // 只展示最近 [AppSettings.maxMessages] 条，防止超长会话渲染卡顿
+    val maxMsg = remember { AppSettings.maxMessages }
+    val slicedRows = remember(rows.size, maxMsg) {
+        if (rows.size <= maxMsg) rows else rows.takeLast(maxMsg)
+    }
+    val displayItems = remember(repo?.rowsVersion?.value ?: 0, slicedRows) { buildDisplayItems(slicedRows) }
+
+    // 监听滚动位置，判断是否显示「回到最新消息」按钮
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: 0) < info.totalItemsCount - 1
+        }.collect { atBottom -> showScrollToBottom = !atBottom }
+    }
 
     // 新消息到达（条目数变化）：滚动定位到最新一条
     LaunchedEffect(displayItems.size, historyUnavailable) {
@@ -399,11 +415,11 @@ fun ChatScreen(
 
     // 流式输出跟随：思考/回复内容增长时条目数不变，按最后一行内容长度触发贴底滚动；
     // 用户上翻阅读历史时（最后一项不可见）暂停跟随，不抢滚动位置
-    val lastRowLen = rows.lastOrNull()?.let {
+    val lastRowLen = slicedRows.lastOrNull()?.let {
         it.text.length + it.outputText.length + it.inputText.length + it.summaryText.length
     } ?: 0
     LaunchedEffect(lastRowLen, working) {
-        if (!autoFollow || rows.isEmpty()) return@LaunchedEffect
+        if (!autoFollow || slicedRows.isEmpty()) return@LaunchedEffect
         val info = listState.layoutInfo
         val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
         if (info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 1) {
@@ -546,20 +562,42 @@ fun ChatScreen(
                     }
                 }
 
-                // 自动跟随开关：亮 = 跟随最新内容，暗 = 手动浏览
-                IconToggleButton(
-                    checked = autoFollow,
-                    onCheckedChange = { autoFollow = it },
+                // 右下角浮动按钮组
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 12.dp, bottom = 12.dp)
-                        .size(34.dp),
+                        .padding(end = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Icon(
-                        Icons.Rounded.ArrowDownward,
-                        contentDescription = if (autoFollow) stringResource(R.string.auto_follow_on) else stringResource(R.string.auto_follow_off),
-                        modifier = Modifier.size(18.dp),
-                    )
+                    // 回到最新消息：自动跟随关闭且用户上翻时出现
+                    AnimatedVisibility(visible = showScrollToBottom) {
+                        FilledTonalIconButton(
+                            onClick = {
+                                showScrollToBottom = false
+                                scope.launch { listState.animateScrollToItem(displayItems.lastIndex) }
+                            },
+                            modifier = Modifier.size(34.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.ArrowDownward,
+                                contentDescription = stringResource(R.string.scroll_to_bottom),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    // 自动跟随开关：亮 = 跟随最新内容，暗 = 手动浏览
+                    IconToggleButton(
+                        checked = autoFollow,
+                        onCheckedChange = { autoFollow = it },
+                        modifier = Modifier.size(34.dp),
+                    ) {
+                        Icon(
+                            Icons.Rounded.ArrowDownward,
+                            contentDescription = if (autoFollow) stringResource(R.string.auto_follow_on) else stringResource(R.string.auto_follow_off),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
 

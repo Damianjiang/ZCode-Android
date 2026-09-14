@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        app.zemote.state.AppSettings.init(this)
         // 进入应用即申请所需权限（相机：扫码配对用；已授权则不再弹窗）
         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 100)
 

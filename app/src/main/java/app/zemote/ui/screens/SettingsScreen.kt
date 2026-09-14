@@ -5,11 +5,13 @@ import android.net.Uri
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.ui.platform.LocalContext
 import app.zemote.R
 import app.zemote.ui.logger.ZemoteLogger
 import app.zemote.state.LanguagePrefs
+import app.zemote.state.AppSettings
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -105,6 +107,50 @@ fun SettingsScreen(
                     onClick = { showLangDialog = true },
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                 )
+            }
+
+            SectionLabel(stringResource(R.string.section_display))
+            SettingsCard {
+                Column {
+                    var maxMsg by remember { mutableStateOf(AppSettings.maxMessages) }
+                    val msgOptions = listOf(100, 200, 500, 1000)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Rounded.HistoryEdu,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.max_messages_label), style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                stringResource(R.string.max_messages_sub, maxMsg),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // 快速选择：左右滑动切换
+                        FilledTonalIconButton(
+                            onClick = { maxMsg = msgOptions[maxMsg.coerceIn(msgOptions.indices) - 1].also { AppSettings.maxMessages = it } },
+                            enabled = maxMsg > msgOptions.first(),
+                            modifier = Modifier.size(32.dp),
+                        ) { Text("‹", style = MaterialTheme.typography.titleMedium) }
+                        FilledTonalIconButton(
+                            onClick = {
+                                val cur = msgOptions.indexOf(maxMsg).coerceIn(0, msgOptions.lastIndex)
+                                maxMsg = msgOptions[cur + 1].also { AppSettings.maxMessages = it }
+                            },
+                            enabled = maxMsg < msgOptions.last(),
+                            modifier = Modifier.size(32.dp),
+                        ) { Text("›", style = MaterialTheme.typography.titleMedium) }
+                    }
+                }
             }
 
             SectionLabel(stringResource(R.string.section_debug))
