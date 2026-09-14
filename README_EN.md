@@ -9,6 +9,8 @@ control desktop ZCode sessions from your phone — no browser needed.
 Written in Kotlin with Jetpack Compose (Material 3). All code is an independent
 implementation.
 
+📱 **Live preview & download**: [damianjiang.github.io/ZCode-Android](https://damianjiang.github.io/ZCode-Android)
+
 <p align="center">
   <img src="screenshots/home_light.png" width="24%" alt="Devices" />
   <img src="screenshots/add_device_sheet.png" width="24%" alt="Add device" />
@@ -35,8 +37,8 @@ implementation.
 - Workspaces: browse directories opened on the desktop, sessions filtered per workspace
 - Session list: running / history sessions with live updates (sessions-index
   subscription merged with bootstrap)
-- Chat: streaming output (thinking, replies and tool calls render as they are
-  generated), Markdown rendering
+- Chat: **streaming output** (thinking, replies and tool calls render incrementally
+  as they are generated), Markdown rendering
 - Execution activity: consecutive tool calls aggregated into one card showing which
   commands ran and which files changed, with raw output on tap
 - Attachments: send images and files (chunked upload), received images rendered inline
@@ -46,7 +48,9 @@ implementation.
 - Dark mode and dynamic color (Android 12+)
 - Foreground keep-alive service: an ongoing notification while connected reduces background disconnections
 - **Subagents**: "View subagent" button inside tool call cards; opens a read-only sub-session page, restores parent on back
-- **Debug Logs**: Settings → Debug → View Logs records all protocol requests/responses and user actions, one-tap copy for sharing
+- **Permission approval**: full support for permission_request / elicitation_request, approve on your phone
+- **Task panel**: view running tasks and pending interactions in real time, cancel with one tap
+- **Debug Logs**: Settings → Debug → View Logs records all protocol requests/responses and user actions, one-tap copy for sharing; clear session cache or logs independently
 - In-app language: follow system / 中文 / English
 
 ## Build
@@ -63,7 +67,7 @@ The APK is written to `app/build/outputs/apk/release/`. Release builds use R8 an
 resource shrinking, signed with the debug key so they install directly. Use
 `assembleDebug` for development.
 
-Requires Android 9.0+ (minSdk 28).
+Requires Android 12+ (minSdk 28).
 
 ## Usage
 

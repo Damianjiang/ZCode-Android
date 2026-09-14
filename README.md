@@ -7,6 +7,8 @@ Android 端的 ZCode 远程控制客户端。通过逆向官方 Web 远程控制
 
 Kotlin + Jetpack Compose（Material 3）编写，全部代码为独立实现。
 
+📱 **在线预览与下载**: [damianjiang.github.io/ZCode-Android](https://damianjiang.github.io/ZCode-Android)
+
 <p align="center">
   <img src="screenshots/home_light.png" width="24%" alt="设备列表" />
   <img src="screenshots/add_device_sheet.png" width="24%" alt="添加设备" />
@@ -26,7 +28,7 @@ Kotlin + Jetpack Compose（Material 3）编写，全部代码为独立实现。
 - 设备配对：扫描桌面端配对二维码或粘贴远程控制 URL，支持保存多台设备并随时切换
 - 工作区：查看桌面端打开的目录，按工作区查看各自的会话
 - 会话列表：运行中 / 历史会话，实时推送（sessions-index 订阅 + bootstrap 合并）
-- 对话：流式输出（思考、回复、工具调用边生成边显示）、Markdown 渲染
+- 对话：**流式实时输出**（思考、回复、工具调用边生成边显示，思考过程逐字渲染）、Markdown 渲染
 - 执行过程：连续的工具调用聚合为摘要卡片，展示执行了什么命令、修改了哪些文件，可展开看原始输出
 - 附件：发送图片和文件（分片上传），收到图片消息直接渲染
 - 排队：AI 回复期间发送的消息进入队列，支持立即发送、编辑、删除、拖动排序
@@ -34,7 +36,10 @@ Kotlin + Jetpack Compose（Material 3）编写，全部代码为独立实现。
 - 深色模式、动态取色（Android 12+）
 - 前台保活服务：连接期间常驻通知，降低后台被杀导致的掉线
 - **子智能体**：工具调用卡片内置「查看子智能体」按钮，点击进入只读子会话，返回自动恢复父会话
-- **调试日志**：设置内新增日志页，记录所有协议请求/响应与用户操作，支持一键复制反馈
+- **权限审批**：完整支持 permission_request / elicitation_request，在手机上即可审批
+- **任务面板**：实时显示后台运行中的任务、待审批交互，支持一键终止任务
+- **调试日志**：设置内新增日志页，记录所有协议请求/响应与用户操作，支持一键复制反馈；可清除缓存释放空间
+- **缓存管理**：设置页可单独清除会话桥接缓存和调试日志
 
 ## 构建
 
@@ -49,7 +54,7 @@ cd ZCode-Android
 产物在 `app/build/outputs/apk/release/`。release 包开启 R8 与资源收缩，
 使用 debug 签名，可以直接安装。日常调试用 `assembleDebug`。
 
-系统要求 Android 9.0+（minSdk 28）。
+系统要求 Android 12+（minSdk 28）。
 
 ## 使用
 
