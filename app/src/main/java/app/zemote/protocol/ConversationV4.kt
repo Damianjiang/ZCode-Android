@@ -833,15 +833,18 @@ class ConversationV4Session private constructor(
             put("limit", limit.toLong())
             if (beforeRowId != null) put("beforeRowId", beforeRowId)
         }
+        ZemoteLogger.info("v4", "loadRows sessionId=$sessionId limit=$limit")
         val res = call("conversationRowsRangeV4", listOf(args), isActiveCheck = { sessionScope.isActive }) as? Map<*, *> ?: run {
             log("[v4] loadRows: unexpected response shape")
             return@withContext _rows.value
         }
+        ZemoteLogger.info("v4", "loadRows response keys=${res.keys.toList()}")
         val container = (res["rows"] as? Map<*, *>) ?: res
         val list = container["rows"] as? List<*> ?: run {
             log("[v4] loadRows: missing rows list")
             return@withContext _rows.value
         }
+        ZemoteLogger.info("v4", "loadRows got ${list.size} rows raw")
         mergeRows(list.mapNotNull(::parseRow))
         log("[v4] loadRows got ${list.size} rows (total=${_rows.value.size})")
         _rows.value
