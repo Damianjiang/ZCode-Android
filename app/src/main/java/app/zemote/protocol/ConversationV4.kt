@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -437,7 +438,8 @@ class ConversationV4Session private constructor(
 
     private suspend fun openConversationInternal(sessionId: String?) {
         // 总超时兜底：任何一步卡住都保证 loading 收敛，界面不会永远转圈
-        kotlinx.coroutines.withTimeout(100_000) {
+        kotlinx.coroutines.withTimeout(45_000) {
+            var rowsLoaded = false
             try {
                 unsubscribeConversation()
                 _activeSessionId.value = sessionId
@@ -452,7 +454,8 @@ class ConversationV4Session private constructor(
                 synchronized(stagedFrames) { stagedFrames.clear() }
                 synchronized(siStaged) { siStaged.clear() }
                 _loading.value = true
-                runCatching { ensureHandshake() }
+                // 握手：15s 独立超时，挂起时快速跳过不阻塞整个打开流程
+                runCatching { withTimeout(15_000) { ensureHandshake() } }
                     .onFailure { log("[v4] handshake failed: $it") }
                 if (!sessionScope.isActive) return@withTimeout
                 // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开；
@@ -465,31 +468,40 @@ class ConversationV4Session private constructor(
                     }
                 }
                 if (sessionId != null && sessionScope.isActive) {
-                    runCatching { subscribeConversation(sessionId) }
+                    // subscribe：20s 独立超时
+                    runCatching { withTimeout(20_000) { subscribeConversation(sessionId) } }
                         .onFailure { log("[v4] subscribe failed: $it") }
-                    try {
-                        loadRows(sessionId, limit = 200)
-                    } catch (e: Exception) {
-                        log("[v4] loadRows failed: ${e.message}")
-                    }
+                    if (!sessionScope.isActive) return@withTimeout
+                    // loadRows：15s 独立超时，拿到数据立即关闭加载动画
+                    runCatching { withTimeout(15_000) { loadRows(sessionId, limit = 200) } }
+                        .onFailure { log("[v4] loadRows failed: $it") }
+                    if (_rows.value.isNotEmpty()) rowsLoaded = true
                     // 兜底：桌面端会话运行时可能未预热，首拉为空时自动补拉两次
-                    if (_rows.value.isEmpty()) {
+                    if (!_rows.value.isEmpty()) {
+                        rowsLoaded = true
+                    } else {
                         repeat(2) { attempt ->
                             if (!sessionScope.isActive) return@withTimeout
-                            delay(if (attempt == 0) 2500L else 5000L)
+                            delay(if (attempt == 0) 1500L else 3000L)
                             if (!sessionScope.isActive) return@withTimeout
-                            if (_rows.value.isNotEmpty()) return@repeat
+                            if (!_rows.value.isEmpty()) {
+                                rowsLoaded = true
+                                return@repeat
+                            }
                             log("[v4] history empty, retry #$attempt")
                             runCatching { resyncConversation() }
-                            try {
-                                loadRows(sessionId, limit = 200)
-                            } catch (_: Exception) {
-                            }
+                            runCatching { withTimeout(15_000) { loadRows(sessionId, limit = 200) } }
+                                .onFailure { log("[v4] loadRows retry #$attempt failed") }
+                            if (!_rows.value.isEmpty()) rowsLoaded = true
                         }
                     }
+                } else {
+                    // 新对话：无需历史，加载完成
+                    rowsLoaded = true
                 }
             } finally {
-                _loading.value = false
+                // rows 已加载则立即关 loading；兜底：超时后也关，防止卡死
+                if (rowsLoaded || !_rows.value.isEmpty()) _loading.value = false
             }
         }
     }
@@ -826,7 +838,7 @@ class ConversationV4Session private constructor(
     // ────────────────────────── 历史窗口 ──────────────────────────
 
     /** 历史行窗口（分页：beforeRowId 传当前最早一行的 rowId） */
-    suspend fun loadRows(sessionId: String, limit: Int = 200, beforeRowId: String? = null): List<ConvRow> = withContext(Dispatchers.IO) {
+    suspend fun loadRows(sessionId: String, limit: Int = 200, beforeRowId: String? = null, timeoutMs: Long = 15_000): List<ConvRow> = withContext(Dispatchers.IO) {
         if (!sessionScope.isActive) return@withContext _rows.value
         val args = scope() + buildMap<String, Any> {
             put("sessionId", sessionId)
@@ -834,7 +846,7 @@ class ConversationV4Session private constructor(
             if (beforeRowId != null) put("beforeRowId", beforeRowId)
         }
         ZemoteLogger.info("v4", "loadRows sessionId=$sessionId limit=$limit")
-        val res = call("conversationRowsRangeV4", listOf(args), isActiveCheck = { sessionScope.isActive }) as? Map<*, *> ?: run {
+        val res = call("conversationRowsRangeV4", listOf(args), timeoutMs = timeoutMs, isActiveCheck = { sessionScope.isActive }) as? Map<*, *> ?: run {
             log("[v4] loadRows: unexpected response shape")
             return@withContext _rows.value
         }
