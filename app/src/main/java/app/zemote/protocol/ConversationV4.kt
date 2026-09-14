@@ -284,15 +284,19 @@ class ConversationV4Session private constructor(
     private var rebuilding = false
 
     init {
-        // 桥接在 openConversation 进行中时恢复：挂起重待办，等它完成后再重建。
-        // 注意：正常路径下 rebuildSubscriptions 由 ZemoteClient.recoverActiveBridges 直接调用；
-        // 此处仅作兜底，防止 openConversation 中途遭遇 bridge 恢复时漏掉重建。
+        // 桥接恢复后：如果会话已有但历史为空（如 bridge 未就绪时打开的会话），
+        // 自动重试加载历史，避免卡在"正在加载对话..."
         sessionScope.launch {
             bridge.recovered.collect { count ->
                 if (count <= 0 || bridge.isDisposed) return@collect
-                if (!opening) return@collect
-                rebuildPending = true
-                log("[v4] bridge recovered during open, rebuild deferred")
+                if (!opening) {
+                    // bridge 已就绪且不在 openConversation 中，尝试重建
+                    rebuildSubscriptions()
+                } else {
+                    // openConversation 进行中，挂起重待办
+                    rebuildPending = true
+                    log("[v4] bridge recovered during open, rebuild deferred")
+                }
             }
         }
     }
@@ -388,6 +392,11 @@ class ConversationV4Session private constructor(
         // 打开期间若有 bridge 恢复事件被搁置，现在补做重建
         if (rebuildPending && !bridge.isDisposed) {
             rebuildPending = false
+            rebuildSubscriptions()
+        }
+        // 若历史加载失败（rows 为空）但 bridge 已就绪，自动重试一次
+        if (_rows.value.isEmpty() && !opening && !bridge.isDisposed) {
+            log("[v4] openConversation finished with empty rows, triggering recovery reload")
             rebuildSubscriptions()
         }
     }
