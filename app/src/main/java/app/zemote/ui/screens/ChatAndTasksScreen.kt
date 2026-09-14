@@ -376,7 +376,7 @@ fun ChatScreen(
     val working by (repo?.agentWorking?.collectAsState() ?: remember { mutableStateOf(false) })
     val loading by (repo?.loading?.collectAsState() ?: remember { mutableStateOf(false) })
     // 有数据时立即停止显示加载动画，不论 loading 标志是否已清除
-    val hasRows = rows.isNotEmpty()
+    val hasRows by remember(rows) { derivedStateOf { rows.isNotEmpty() } }
     val convConfig by (repo?.convConfig?.collectAsState() ?: remember { mutableStateOf(null) })
     val usage by (repo?.usage?.collectAsState() ?: remember { mutableStateOf(null) })
     val activeId by (repo?.activeSessionId?.collectAsState() ?: remember { mutableStateOf(sessionId) })
