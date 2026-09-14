@@ -63,7 +63,12 @@ import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SmartToy
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.TaskAlt
+import androidx.compose.material.icons.rounded.Work
+import androidx.compose.material.icons.rounded.Cancel
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -106,6 +111,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.zemote.protocol.ConvKinds
 import app.zemote.protocol.ConvRow
+import app.zemote.protocol.PendingInteraction
+import app.zemote.protocol.BackgroundWork
 import app.zemote.protocol.TaskEntry
 import app.zemote.state.AppSessionViewModel
 import app.zemote.state.AppSettings
@@ -375,6 +382,13 @@ fun ChatScreen(
     val queueItems by (repo?.queueItems?.collectAsState() ?: remember { mutableStateOf(emptyList<app.zemote.protocol.QueueItem>()) })
     val autoDrain by (repo?.autoDrain?.collectAsState() ?: remember { mutableStateOf(true) })
     val sessionEntries by (repo?.sessionEntries?.collectAsState() ?: remember { mutableStateOf(emptyList<app.zemote.protocol.SessionEntry>()) })
+    val pendingInteractions by (repo?.pendingInteractions?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
+    val backgroundWorks by (repo?.backgroundWorks?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
+
+    // 交互响应状态
+    var selectedInteraction by remember { mutableStateOf<PendingInteraction?>(null) }
+    // 任务面板开关
+    var showTaskPanel by remember { mutableStateOf(false) }
 
     // 附件内容加载（收到的图片消息按 ref 拉取渲染）
     val loadAttachment: suspend (String) -> app.zemote.protocol.AttachmentData? = { ref ->
@@ -438,6 +452,8 @@ fun ChatScreen(
         val sessionTitle = sessionEntries
             .firstOrNull { it.sessionId == activeId }
             ?.title?.trim()?.ifBlank { null }
+        val hasPending = pendingInteractions.isNotEmpty()
+        val hasBackground = backgroundWorks.any { it.status == "running" }
         ScreenHeader(
             title = when {
                 activeId == null -> stringResource(R.string.new_chat)
@@ -446,6 +462,31 @@ fun ChatScreen(
             },
             subtitle = activeId?.take(12),
             onBack = onBack,
+            actions = {
+                // 任务面板按钮：显示运行中任务和后台进程
+                FilledTonalIconButton(
+                    onClick = { showTaskPanel = !showTaskPanel },
+                    modifier = Modifier.size(36.dp),
+                    enabled = repo != null && error == null,
+                ) {
+                    val tint = if (hasPending || hasBackground) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        Icons.Rounded.TaskAlt,
+                        contentDescription = stringResource(R.string.tasks_panel),
+                        tint = tint,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    if (hasPending) {
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(MaterialTheme.colorScheme.error, CircleShape),
+                        )
+                    }
+                }
+            },
         )
 
         val errorMessage = error
@@ -692,6 +733,39 @@ fun ChatScreen(
                     },
                 )
             }
+        }
+
+        // 权限审批 / 用户输入弹窗
+        selectedInteraction?.let { inter ->
+            InteractionDialog(
+                interaction = inter,
+                onRespond = { optionId, freeText, action ->
+                    val req = selectedInteraction
+                    selectedInteraction = null
+                    scope.launch {
+                        if (req != null) repo?.respondInteraction(req.requestId, optionId, freeText, action)
+                    }
+                },
+                onDismiss = { selectedInteraction = null },
+            )
+        }
+
+        // 任务面板（全屏覆盖）
+        if (showTaskPanel) {
+            TaskPanel(
+                interactions = pendingInteractions,
+                works = backgroundWorks,
+                onRespond = { inter, optId, freeText, action ->
+                    scope.launch {
+                        repo?.respondInteraction(inter.requestId, optId, freeText, action)
+                        showTaskPanel = false
+                    }
+                },
+                onCancel = { workId ->
+                    scope.launch { repo?.cancelBackgroundWork(workId) }
+                },
+                onDismiss = { showTaskPanel = false },
+            )
         }
     }
 }
@@ -1410,6 +1484,254 @@ private fun buildDisplayItems(rows: List<ConvRow>): List<DisplayItem> {
     return out
 }
 
+// ────────────────────────── 交互响应弹窗 ──────────────────────────
+
+/** 权限审批 / 用户输入弹窗 */
+@Composable
+private fun InteractionDialog(
+    interaction: PendingInteraction,
+    onRespond: (optionId: String?, freeText: String?, action: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember(interaction.requestId) { mutableStateOf("") }
+    val ctx = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            if (interaction.kind == "permission")
+                Text(stringResource(R.string.permission_request_title))
+            else
+                Text(stringResource(R.string.elicitation_request_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (interaction.body.isNotBlank()) {
+                    Text(interaction.body, style = MaterialTheme.typography.bodyMedium)
+                }
+                if (interaction.options.isNotEmpty()) {
+                    interaction.options.forEach { opt ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onRespond(opt.optionId, null, null) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (opt.kind == "deny") Icons.Rounded.Close
+                                else Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = if (opt.kind == "deny") MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(opt.label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                } else if (interaction.kind != "permission") {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (interaction.options.isEmpty() && interaction.kind != "permission") {
+                TextButton(
+                    onClick = { onRespond(null, text.trim(), null) },
+                    enabled = text.isNotBlank(),
+                ) { Text(stringResource(R.string.elicitation_submit)) }
+            }
+        },
+        dismissButton = {
+            if (interaction.options.isEmpty()) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
+    )
+}
+
+// ────────────────────────── 任务面板 ──────────────────────────
+
+/** 任务面板：显示待响应交互 + 后台运行中的任务 */
+@Composable
+private fun TaskPanel(
+    interactions: List<PendingInteraction>,
+    works: List<BackgroundWork>,
+    onRespond: (PendingInteraction, String?, String?, String?) -> Unit,
+    onCancel: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val ctx = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        // 标题栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.tasks_panel), style = MaterialTheme.typography.titleLarge)
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // 待响应交互
+            if (interactions.isNotEmpty()) {
+                item {
+                    Text(
+                        stringResource(R.string.permission_request_title),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+                items(interactions, key = { it.requestId }) { inter ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            if (inter.body.isNotBlank()) {
+                                Text(inter.body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                            if (inter.options.isNotEmpty()) {
+                                inter.options.forEach { opt ->
+                                    val isDeny = opt.kind == "deny"
+                                    FilledTonalIconButton(
+                                        onClick = { onRespond(inter, opt.optionId, null, null) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                if (isDeny) Icons.Rounded.Close else Icons.Rounded.Check,
+                                                contentDescription = null,
+                                                tint = if (isDeny) MaterialTheme.colorScheme.error
+                                                    else MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(opt.label, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                            } else if (inter.kind != "permission") {
+                                // 用户输入型交互
+                                var text by remember(inter.requestId) { mutableStateOf("") }
+                                OutlinedTextField(
+                                    value = text,
+                                    onValueChange = { text = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 3,
+                                    placeholder = { Text(stringResource(R.string.elicitation_request_title)) },
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+                                    FilledTonalIconButton(
+                                        onClick = { onRespond(inter, null, text.trim(), null) },
+                                        enabled = text.isNotBlank(),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Text(stringResource(R.string.elicitation_submit))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 后台任务
+            val runningWorks = works.filter { it.status == "running" }
+            if (runningWorks.isNotEmpty()) {
+                item {
+                    Text(
+                        stringResource(R.string.task_running),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+                items(runningWorks, key = { it.workId }) { work ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (work.kind == "subagent") Icons.Rounded.SmartToy
+                                else Icons.Rounded.Terminal,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                work.title.ifBlank { "${work.kind}" },
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (work.cancellable) {
+                                IconButton(
+                                    onClick = { onCancel(work.workId) },
+                                    modifier = Modifier.size(32.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Cancel,
+                                        contentDescription = stringResource(R.string.task_cancel),
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (interactions.isEmpty() && runningWorks.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(stringResource(R.string.task_no_work), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** AI 消息淡入容器：首次进入组合时从透明渐变到完全不透明 */
 @Composable
 private fun FadeInContainer(key: Any?, content: @Composable () -> Unit) {
@@ -1848,7 +2170,7 @@ private fun modelLabel(provider: String, model: String): String {
 // ────────────────────────── 通用小组件 ──────────────────────────
 
 @Composable
-fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit) {
+fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1858,7 +2180,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
         }
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             if (subtitle != null) {
                 Text(
@@ -1868,6 +2190,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit) {
                 )
             }
         }
+        actions()
     }
 }
 

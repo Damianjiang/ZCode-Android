@@ -199,4 +199,14 @@
     <string name="max_messages_sub">最多展示 %1$d 条消息（推荐 200）</string>
     <string name="scroll_to_bottom">回到最新消息</string>
     <string name="has_new_messages">有新消息</string>
+    <string name="tasks_panel">任务面板</string>
+    <string name="permission_request_title">需要确认权限</string>
+    <string name="permission_allow">允许</string>
+    <string name="permission_deny">拒绝</string>
+    <string name="permission_always">始终允许</string>
+    <string name="elicitation_request_title">需要输入</string>
+    <string name="elicitation_submit">提交</string>
+    <string name="task_running">运行中</string>
+    <string name="task_cancel">取消</string>
+    <string name="task_no_work">暂无后台任务</string>
 </resources>

@@ -73,6 +73,32 @@ data class QueueItem(
     val createdAt: Long? = null,
 )
 
+/** 待响应的交互请求（权限审批 / 用户输入 / 计划确认） */
+data class PendingInteraction(
+    val requestId: String,
+    val kind: String,          // "permission" | "userInput" | "workspaceHookReview"
+    val title: String,
+    val body: String,
+    val options: List<InteractionOption> = emptyList(),
+    val multiSelect: Boolean = false,
+)
+
+data class InteractionOption(
+    val optionId: String,
+    val label: String,
+    val kind: String,          // "allowOnce" | "allowAlways" | "deny" | "custom"
+)
+
+/** 后台任务（bash / subagent） */
+data class BackgroundWork(
+    val workId: String,
+    val kind: String,          // "bash" | "subagent"
+    val title: String,
+    val status: String,        // "running" | "resultPending" | "failed" | "cancelled"
+    val startedAt: Long = 0L,
+    val cancellable: Boolean = false,
+)
+
 /** 对话时间线行（聊天页）。kind 见 [ConvKinds]。rowId 为服务端递增数字。 */
 data class ConvRow(
     val rowId: Long,
@@ -245,6 +271,14 @@ class ConversationV4Session private constructor(
     /** sessions-index 实时会话列表（按最近活动倒序） */
     private val _sessionEntries = MutableStateFlow<List<SessionEntry>>(emptyList())
     val sessionEntries: StateFlow<List<SessionEntry>> = _sessionEntries.asStateFlow()
+
+    /** 待响应的交互请求（权限审批 / 用户输入 / 计划确认） */
+    private val _pendingInteractions = MutableStateFlow<List<PendingInteraction>>(emptyList())
+    val pendingInteractions: StateFlow<List<PendingInteraction>> = _pendingInteractions.asStateFlow()
+
+    /** 后台运行中的任务（bash / subagent） */
+    private val _backgroundWorks = MutableStateFlow<List<BackgroundWork>>(emptyList())
+    val backgroundWorks: StateFlow<List<BackgroundWork>> = _backgroundWorks.asStateFlow()
 
     // ── 内部协议状态 ──
     private var handshakeDone = false
@@ -505,6 +539,8 @@ class ConversationV4Session private constructor(
         convSubId = null
         _agentWorking.value = false
         _stopWorkId.value = null
+        _pendingInteractions.value = emptyList()
+        _backgroundWorks.value = emptyList()
         if (id != null) {
             // 使用 sessionScope 而非裸 CoroutineScope，确保 dispose 时能随会话一起取消
             sessionScope.launch {
@@ -653,6 +689,8 @@ class ConversationV4Session private constructor(
         (snap["usage"] as? Map<*, *>)?.let(::mergeUsage)
         (snap["control"] as? Map<*, *>)?.let(::mergeControl)
         (snap["queue"] as? Map<*, *>)?.let(::mergeQueue)
+        (snap["pendingInteractions"] as? List<*>)?.let(::mergeInteractions)
+        (snap["backgroundWorks"] as? List<*>)?.let(::mergeBackgroundWorks)
         val rowsObj = snap["rows"] as? Map<*, *>
         if (rowsObj != null) {
             val window = (rowsObj["window"] as? List<*>)?.mapNotNull(::parseRow).orEmpty()
@@ -711,6 +749,8 @@ class ConversationV4Session private constructor(
                     (patch["usage"] as? Map<*, *>)?.let(::mergeUsage)
                     (patch["control"] as? Map<*, *>)?.let(::mergeControl)
                     (patch["queue"] as? Map<*, *>)?.let(::mergeQueue)
+                    (patch["pendingInteractions"] as? List<*>)?.let(::mergeInteractions)
+                    (patch["backgroundWorks"] as? List<*>)?.let(::mergeBackgroundWorks)
                     (patch["revision"] as? Number)?.toLong()?.let { revision = it }
                     if (patch.containsKey("working")) {
                         _agentWorking.value = patch["working"] == true
@@ -1027,6 +1067,38 @@ class ConversationV4Session private constructor(
             log("[v4] $type failed: ${e.message}")
             false
         }
+    }
+
+    // ── 交互响应（权限审批 / 用户输入 / 计划确认） ──
+
+    /** 响应交互请求：权限审批选 optionId，用户输入填 freeText，计划确认选 action */
+    suspend fun respondInteraction(
+        requestId: String,
+        optionId: String? = null,
+        freeText: String? = null,
+        action: String? = null,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val sessionId = _activeSessionId.value ?: return@withContext false
+        val answer = mutableMapOf<String, Any?>()
+        if (optionId != null) answer["optionId"] = optionId
+        if (freeText != null) answer["freeText"] = freeText
+        if (action != null) answer["action"] = action
+        runCatching {
+            sendCommand(sessionId, "resolveInteraction", mapOf(
+                "interactionId" to requestId,
+                "answer" to answer,
+            ))
+            true
+        }.onFailure { log("[v4] respondInteraction failed: $it") }.getOrDefault(false)
+    }
+
+    /** 取消后台任务（bash / subagent） */
+    suspend fun cancelBackgroundWork(workId: String): Boolean = withContext(Dispatchers.IO) {
+        val sessionId = _activeSessionId.value ?: return@withContext false
+        runCatching {
+            sendCommand(sessionId, "cancel", mapOf("workId" to workId))
+            true
+        }.onFailure { log("[v4] cancelBackgroundWork failed: $it") }.getOrDefault(false)
     }
 
     /**
@@ -1352,6 +1424,59 @@ class ConversationV4Session private constructor(
                 )
             }
             .orEmpty()
+    }
+
+    /** 解析 pendingInteractions：权限审批 / 用户输入 / 计划确认 */
+    private fun mergeInteractions(list: List<*>) {
+        _pendingInteractions.value = list.mapNotNull { raw ->
+            val m = raw as? Map<*, *> ?: return@mapNotNull null
+            val requestId = m["requestId"]?.toString() ?: return@mapNotNull null
+            val payload = m["payload"] as? Map<*, *> ?: return@mapNotNull null
+            val kind = payload["kind"]?.toString() ?: return@mapNotNull null
+            val title = m["title"]?.toString()?.takeIf { it.isNotBlank() }
+                ?: when (kind) {
+                    "permission" -> payload["summary"]?.toString().orEmpty()
+                    else -> ""
+                }
+            val body = m["body"]?.toString()
+                ?: payload["summary"]?.toString()?.ifBlank { null }
+                ?: payload["prompt"]?.toString()?.ifBlank { null }
+                ?: ""
+            val options = (payload["options"] as? List<*>)
+                ?.mapNotNull { o ->
+                    val om = o as? Map<*, *> ?: return@mapNotNull null
+                    InteractionOption(
+                        optionId = om["optionId"]?.toString() ?: return@mapNotNull null,
+                        label = om["label"]?.toString().orEmpty(),
+                        kind = om["kind"]?.toString() ?: "allowOnce",
+                    )
+                }
+                .orEmpty()
+            PendingInteraction(
+                requestId = requestId,
+                kind = kind,
+                title = title,
+                body = body,
+                options = options,
+                multiSelect = payload["multiSelect"] == true,
+            )
+        }
+    }
+
+    /** 解析后台任务 */
+    private fun mergeBackgroundWorks(list: List<*>) {
+        _backgroundWorks.value = list.mapNotNull { raw ->
+            val m = raw as? Map<*, *> ?: return@mapNotNull null
+            val workId = m["workId"]?.toString() ?: return@mapNotNull null
+            BackgroundWork(
+                workId = workId,
+                kind = m["kind"]?.toString() ?: "bash",
+                title = m["title"]?.toString().orEmpty(),
+                status = m["status"]?.toString() ?: "running",
+                startedAt = (m["startedAt"] as? Number)?.toLong() ?: 0L,
+                cancellable = m["cancellable"] == true,
+            )
+        }
     }
 
     private fun mergeControl(c: Map<*, *>) {        // 运行状态以 control.phase 为准（running/prewarming），并同步停止按钮
