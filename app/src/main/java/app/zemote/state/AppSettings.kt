@@ -13,7 +13,7 @@ object AppSettings {
         const val MAX_MESSAGES = "max_messages"
     }
 
-    private const val DEFAULT_MAX_MESSAGES = 200
+    private const val DEFAULT_MAX_MESSAGES = 100
     private const val FILE = "zemote_settings"
 
     private lateinit var context: Context

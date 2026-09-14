@@ -196,7 +196,15 @@
     <string name="debug_logs_view_sub">记录请求/响应/操作，点击复制给开发者</string>
     <string name="section_display">显示</string>
     <string name="max_messages_label">历史消息条数</string>
-    <string name="max_messages_sub">最多展示 %1$d 条消息（推荐 200）</string>
+    <string name="max_messages_sub">最多展示 %1$d 条（推荐 100）</string>
+    <string name="max_messages_saved">已保存：展示 %1$d 条</string>
+    <string name="section_cache">缓存</string>
+    <string name="cache_sessions">会话缓存</string>
+    <string name="cache_sessions_sub">清除已断开连接的工作区数据（不影响云端消息）</string>
+    <string name="cache_logs">调试日志</string>
+    <string name="cache_logs_sub">清除本地协议层记录（不影响聊天记录）</string>
+    <string name="cache_clear_all">清除全部缓存</string>
+    <string name="cache_cleared">缓存已清除</string>
     <string name="scroll_to_bottom">回到最新消息</string>
     <string name="has_new_messages">有新消息</string>
     <string name="tasks_panel">任务面板</string>

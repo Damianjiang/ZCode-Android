@@ -801,7 +801,7 @@ private fun TimelineRow(row: ConvRow, loadAttachment: suspend (String) -> app.ze
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        ConvKinds.REASONING -> if (row.text.isNotBlank()) ThinkingBlock(row)
+        ConvKinds.REASONING -> ThinkingBlock(row)
         // 工具调用统一走「执行过程」汇总卡片（正常路径由 buildDisplayItems 聚合，
         // 此处兜底处理未聚合的单条）
         ConvKinds.TOOL_CALL -> ToolGroupCard(listOf(row), onOpenSubagent)

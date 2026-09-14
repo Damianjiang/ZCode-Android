@@ -2,16 +2,6 @@ package app.zemote.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.ui.platform.LocalContext
-import app.zemote.R
-import app.zemote.ui.logger.ZemoteLogger
-import app.zemote.state.LanguagePrefs
-import app.zemote.state.AppSettings
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -30,44 +19,70 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.BugReport
-import androidx.compose.material3.Switch
-import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.zemote.BuildConfig
+import app.zemote.R
+import app.zemote.state.AppSettings
+import app.zemote.state.LanguagePrefs
+import app.zemote.ui.logger.ZemoteLogger
 import app.zemote.ui.theme.ThemeManager
+import kotlinx.coroutines.launch
 
 /** 设置页（底部栏 Tab）：外观入口 / 关于 / 更新日志入口 */
 @Composable
 fun SettingsScreen(
+    session: app.zemote.state.AppSessionViewModel? = null,
     onOpenPersonalize: () -> Unit = {},
     onOpenChangelog: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
 ) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var debugLogEnabled by remember { mutableStateOf(ZemoteLogger.enabled) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding(),
     ) {
-        // Tab 页头：无返回键
         Text(
             stringResource(R.string.settings_title),
             style = MaterialTheme.typography.headlineMedium,
@@ -81,39 +96,25 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            val ctx = LocalContext.current
             val currentLang = LanguagePrefs.get(ctx)
             val langName = when (currentLang) {
                 LanguagePrefs.ZH -> stringResource(R.string.lang_chinese)
                 LanguagePrefs.EN -> stringResource(R.string.lang_english)
                 else -> stringResource(R.string.lang_follow_system)
             }
-            var debugLogEnabled by remember { mutableStateOf(true) }
             var showLangDialog by remember { mutableStateOf(false) }
-
-            SectionLabel(stringResource(R.string.section_appearance))
-            SettingsCard {
-                SettingRow(
-                    icon = Icons.Rounded.Palette,
-                    title = stringResource(R.string.personalize),
-                    subtitle = stringResource(R.string.personalize_sub),
-                    onClick = onOpenPersonalize,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                )
-                SettingRow(
-                    icon = Icons.Rounded.Language,
-                    title = stringResource(R.string.language_label),
-                    subtitle = langName,
-                    onClick = { showLangDialog = true },
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                )
-            }
 
             SectionLabel(stringResource(R.string.section_display))
             SettingsCard {
                 Column {
-                    var maxMsg by remember { mutableStateOf(AppSettings.maxMessages) }
-                    val msgOptions = listOf(100, 200, 500, 1000)
+                    // 历史消息条数：数字输入框 + 保存按钮
+                    var maxMsgText by remember { mutableStateOf(AppSettings.maxMessages.toString()) }
+                    val maxMsg = AppSettings.maxMessages
+                    LaunchedEffect(maxMsg) {
+                        if (maxMsgText.isEmpty() || maxMsgText != maxMsg.toString()) {
+                            maxMsgText = maxMsg.toString()
+                        }
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -135,22 +136,84 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        // 快速选择：左右滑动切换
-                        FilledTonalIconButton(
-                            onClick = { maxMsg = msgOptions[maxMsg.coerceIn(msgOptions.indices) - 1].also { AppSettings.maxMessages = it } },
-                            enabled = maxMsg > msgOptions.first(),
-                            modifier = Modifier.size(32.dp),
-                        ) { Text("‹", style = MaterialTheme.typography.titleMedium) }
-                        FilledTonalIconButton(
+                        OutlinedTextField(
+                            value = maxMsgText,
+                            onValueChange = { maxMsgText = it },
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = KeyboardType.Number,
+                                imeAction = ImeAction.Done,
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.width(72.dp),
+                        )
+                        IconButton(
                             onClick = {
-                                val cur = msgOptions.indexOf(maxMsg).coerceIn(0, msgOptions.lastIndex)
-                                maxMsg = msgOptions[cur + 1].also { AppSettings.maxMessages = it }
+                                val n = maxMsgText.trim().toIntOrNull()
+                                if (n != null) {
+                                    AppSettings.maxMessages = n
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(ctx.getString(R.string.max_messages_saved, n))
+                                    }
+                                }
                             },
-                            enabled = maxMsg < msgOptions.last(),
-                            modifier = Modifier.size(32.dp),
-                        ) { Text("›", style = MaterialTheme.typography.titleMedium) }
+                        ) {
+                            Icon(
+                                Icons.Rounded.ClearAll,
+                                contentDescription = stringResource(R.string.save),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
+            }
+
+            SectionLabel(stringResource(R.string.section_cache))
+            SettingsCard {
+                Column {
+                    SettingRow(
+                        icon = Icons.Rounded.BugReport,
+                        title = stringResource(R.string.cache_sessions),
+                        subtitle = stringResource(R.string.cache_sessions_sub),
+                        onClick = {
+                            scope.launch {
+                                session?.disconnectAll()
+                                snackbarHostState.showSnackbar(ctx.getString(R.string.cache_cleared))
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.BugReport,
+                        title = stringResource(R.string.cache_logs),
+                        subtitle = stringResource(R.string.cache_logs_sub),
+                        onClick = {
+                            scope.launch {
+                                ZemoteLogger.clear()
+                                snackbarHostState.showSnackbar(ctx.getString(R.string.cache_cleared))
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    )
+                }
+            }
+
+            SectionLabel(stringResource(R.string.section_appearance))
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.Palette,
+                    title = stringResource(R.string.personalize),
+                    subtitle = stringResource(R.string.personalize_sub),
+                    onClick = onOpenPersonalize,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+                SettingRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.language_label),
+                    subtitle = langName,
+                    onClick = { showLangDialog = true },
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
             }
 
             SectionLabel(stringResource(R.string.section_debug))
@@ -252,6 +315,8 @@ fun SettingsScreen(
                 modifier = Modifier.padding(start = 6.dp, bottom = 28.dp),
             )
         }
+
+        SnackbarHost(hostState = snackbarHostState)
     }
 }
 

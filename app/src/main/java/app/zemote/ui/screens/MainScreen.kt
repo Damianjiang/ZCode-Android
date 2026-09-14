@@ -94,6 +94,7 @@ fun MainScreen(
                 when (current) {
                     0 -> AccountsScreen(store = store, session = session, onNavigateToShell = onNavigateToShell, onScan = onScan)
                     else -> SettingsScreen(
+                        session = session,
                         onOpenPersonalize = onOpenPersonalize,
                         onOpenChangelog = onOpenChangelog,
                         onOpenLogs = onOpenLogs,
