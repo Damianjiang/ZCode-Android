@@ -3,282 +3,101 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ZCode Android 客户端 | Zemote — AI智能助手远程控制</title>
-  <meta name="description" content="Zemote 是 ZCode 官方 Web 控制的 Android 替代客户端，支持远程操控桌面端会话、子智能体管理、流式输出、权限审批、调试日志。Kotlin Compose Material 3 构建，完全开源。">
-  <meta name="keywords" content="ZCode, Android客户端, AI助手, 远程桌面, 智能代理, 子智能体, 流式输出, ChatGPT, DeepSeek, Claude, Gemini, Cursor, Windsurf, GitHub Copilot, Android应用, Kotlin, Jetpack Compose, Material 3, 远程控制, 代码助手, 编程AI, AI远程办公, 移动端控制, 智能体协作, 工具调用, 调试日志, 权限审批, 任务管理, OpenAI API, LLM客户端, 大模型应用">
-  <meta name="author" content="Damianjiang">
-  <meta name="robots" content="index, follow">
-
-  <!-- Open Graph -->
+  <title>Zemote — ZCode Android 远程控制客户端</title>
+  <meta name="description" content="Zemote 是 ZCode 的 Android 远程控制客户端，支持流式输出、子智能体、权限审批、调试日志。Kotlin Compose Material 3，完全开源。">
+  <meta name="keywords" content="ZCode,Android客户端,AI助手,远程桌面,子智能体,流式输出,Cursor,Windsurf,ChatGPT,DeepSeek,Claude,Gemini,MCP,开源,APK,Kotlin,Jetpack Compose,Material 3,远程控制,调试日志,权限审批">
   <meta property="og:title" content="Zemote — ZCode Android 远程控制客户端">
-  <meta property="og:description" content="在手机远程控制你的桌面 AI 会话，支持子智能体、权限审批、流式输出、调试日志。">
+  <meta property="og:description" content="在手机远程控制你的桌面 AI 会话，支持流式输出、子智能体、权限审批。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://damianjiang.github.io/ZCode-Android/">
   <meta property="og:image" content="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step1_home.png">
-
-  <!-- Keywords for closed-source app stores (酷安/应用宝/小米等) -->
-  <meta name="app-keywords" content="远程控制,AI助手,智能代理,远程桌面,ZCode,ChatGPT,Cursor,编程,Android,开源,子智能体,流式输出,调试日志,权限管理,任务管理,Linux,MCP,智能体,AI编程助手">
-
   <style>
-    :root {
-      --bg: #0d1117;
-      --card: #161b22;
-      --border: #30363d;
-      --accent: #58a6ff;
-      --text: #c9d1d9;
-      --muted: #8b949e;
-    }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.7;
-    }
-    a { color: var(--accent); text-decoration: none; }
-    .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif;line-height:1.7}
+    a{color:#111;text-decoration:underline;text-underline-offset:3px}
+    a:hover{opacity:.7}
+    .container{max-width:800px;margin:0 auto;padding:0 24px}
 
-    /* Hero */
-    .hero {
-      padding: 80px 0 60px;
-      text-align: center;
-      border-bottom: 1px solid var(--border);
-    }
-    .badge {
-      display: inline-block;
-      background: #1f6feb22;
-      color: var(--accent);
-      padding: 4px 14px;
-      border-radius: 20px;
-      font-size: 13px;
-      margin-bottom: 20px;
-      border: 1px solid #1f6feb44;
-    }
-    .hero h1 {
-      font-size: 42px;
-      font-weight: 800;
-      color: #f0f6fc;
-      margin-bottom: 16px;
-      letter-spacing: -0.5px;
-    }
-    .hero h1 span { color: var(--accent); }
-    .hero p { font-size: 18px; color: var(--muted); max-width: 560px; margin: 0 auto 32px; }
-    .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 12px 28px; border-radius: 10px; font-size: 15px; font-weight: 600;
-      transition: transform 0.15s, box-shadow 0.15s;
-    }
-    .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px #1f6feb33; }
-    .btn-primary { background: #1f6feb; color: #fff; }
-    .btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    /* Header */
+    header{padding:80px 0 60px;border-bottom:1px solid #e5e5e5}
+    .label{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:16px}
+    h1{font-size:clamp(32px,5vw,52px);font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-bottom:20px}
+    h1 em{font-style:normal;color:#555}
+    .desc{font-size:18px;color:#555;max-width:520px;margin-bottom:36px}
+    .actions{display:flex;gap:12px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:all .15s}
+    .btn-primary{background:#111;color:#fff}
+    .btn-primary:hover{background:#333;opacity:1}
+    .btn-secondary{background:transparent;color:#111;border:1px solid #ccc}
+    .btn-secondary:hover{border-color:#111}
+    .qq{margin-top:20px;font-size:13px;color:#888}
+    .qq a{color:#111;font-weight:600}
 
-    /* Screenshot carousel */
-    .screenshots { padding: 60px 0; }
-    .screenshots h2 { text-align: center; font-size: 28px; color: #f0f6fc; margin-bottom: 40px; }
-    .screen-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-    }
-    .screen-grid img {
-      width: 100%;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      transition: transform 0.2s;
-    }
-    .screen-grid img:hover { transform: scale(1.03); }
-    .screen-label {
-      text-align: center;
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 6px;
-    }
-    .screen-item { text-align: center; }
+    /* Screenshots */
+    section{padding:60px 0;border-bottom:1px solid #e5e5e5}
+    section:last-of-type{border-bottom:none}
+    .section-title{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#888;margin-bottom:32px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px}
+    .grid img{width:100%;border-radius:12px;border:1px solid #e5e5e5;transition:transform .15s}
+    .grid img:hover{transform:scale(1.02)}
+    .cap{font-size:12px;color:#888;margin-top:8px;text-align:center}
 
     /* Features */
-    .features { padding: 60px 0; border-top: 1px solid var(--border); }
-    .features h2 { text-align: center; font-size: 28px; color: #f0f6fc; margin-bottom: 40px; }
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 20px;
-    }
-    .feature-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 24px;
-    }
-    .feature-card h3 { color: #f0f6fc; font-size: 16px; margin-bottom: 8px; }
-    .feature-card p { color: var(--muted); font-size: 14px; }
-    .feature-icon { font-size: 24px; margin-bottom: 12px; }
-
-    /* Keywords section */
-    .keywords {
-      padding: 40px 0;
-      border-top: 1px solid var(--border);
-      text-align: center;
-    }
-    .keywords h2 { font-size: 18px; color: #f0f6fc; margin-bottom: 16px; }
-    .tag-cloud { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-    .tag {
-      background: var(--card);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 4px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-    }
+    .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
+    .feat h3{font-size:15px;font-weight:700;margin-bottom:6px}
+    .feat p{font-size:14px;color:#555}
 
     /* Footer */
-    footer {
-      padding: 40px 0;
-      border-top: 1px solid var(--border);
-      text-align: center;
-      color: var(--muted);
-      font-size: 14px;
-    }
+    footer{padding:40px 0;text-align:center;font-size:13px;color:#888}
+    footer a{color:#111}
   </style>
 </head>
 <body>
 
-  <!-- Hero -->
-  <section class="hero">
+  <header>
     <div class="container">
-      <div class="badge">v1.9.0 · 开源免费 · Android 12+</div>
-      <h1>Zemote — 手机掌控 <span>AI 远程桌面</span></h1>
-      <p>一款 Android 端 AI 会话控制客户端，支持 ZCode、Cursor、Windsurf 等智能体的远程操控。流畅的流式输出、子智能体管理、权限审批，体验不亚于官方 Web。</p>
-      <div class="btn-group">
-        <a class="btn btn-primary" href="https://github.com/Damianjiang/ZCode-Android/releases/latest">
-          ⬇ 下载 APK
-        </a>
-        <a class="btn btn-ghost" href="https://github.com/Damianjiang/ZCode-Android">
-          ⭐ GitHub 源码
-        </a>
+      <div class="label">v1.9.0 · 开源免费 · Android 12+</div>
+      <h1>手机掌控 <em>AI 远程桌面</em></h1>
+      <p class="desc">Zemote 是 ZCode 的 Android 客户端，支持流式实时渲染、子智能体管理、权限审批、调试日志。Kotlin Compose Material 3 构建，完全开源。</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/Damianjiang/ZCode-Android/releases/latest">⬇ 下载 APK</a>
+        <a class="btn btn-secondary" href="https://github.com/Damianjiang/ZCode-Android">⭐ GitHub</a>
+      </div>
+      <p class="qq">QQ 群：<a href="https://qm.qq.com/q/1090759263">1090759263</a> — 交流使用问题与反馈</p>
+    </div>
+  </header>
+
+  <section>
+    <div class="container">
+      <div class="section-title">界面</div>
+      <div class="grid">
+        <div><img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step1_home.png" alt="设备列表"><div class="cap">设备列表</div></div>
+        <div><img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step3_add_device.png" alt="添加设备"><div class="cap">扫码添加</div></div>
+        <div><img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step4_settings_page.png" alt="设置页"><div class="cap">设置页</div></div>
+        <div><img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step5_settings_scroll.png" alt="缓存管理"><div class="cap">缓存管理</div></div>
+        <div><img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/home_dark.png" alt="深色模式"><div class="cap">深色模式</div></div>
       </div>
     </div>
   </section>
 
-  <!-- Screenshots -->
-  <section class="screenshots">
+  <section>
     <div class="container">
-      <h2>📱 界面预览</h2>
-      <div class="screen-grid">
-        <div class="screen-item">
-          <img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step1_home.png" alt="设备列表 - 连接你的桌面AI">
-          <div class="screen-label">设备列表</div>
-        </div>
-        <div class="screen-item">
-          <img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step3_add_device.png" alt="添加设备 - 扫码配对">
-          <div class="screen-label">扫码添加设备</div>
-        </div>
-        <div class="screen-item">
-          <img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step4_settings_page.png" alt="设置页 - 主题语言调试日志">
-          <div class="screen-label">设置与缓存管理</div>
-        </div>
-        <div class="screen-item">
-          <img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/step5_settings_scroll.png" alt="设置页滚动 - 缓存清除">
-          <div class="screen-label">缓存清除</div>
-        </div>
-        <div class="screen-item">
-          <img src="https://github.com/Damianjiang/ZCode-Android/raw/main/screenshots/home_light.png" alt="深色模式">
-          <div class="screen-label">浅色/深色主题</div>
-        </div>
+      <div class="section-title">功能</div>
+      <div class="features">
+        <div class="feat"><h3>⚡ 流式实时渲染</h3><p>思考过程逐字增量显示，不再等思考完成后整段弹出。</p></div>
+        <div class="feat"><h3>🤖 子智能体管理</h3><p>工具调用卡片一键进入只读子会话，返回自动恢复父会话。</p></div>
+        <div class="feat"><h3>🔐 权限审批</h3><p>完整支持 permission_request / elicitation_request，手机端直接审批。</p></div>
+        <div class="feat"><h3>📋 任务面板</h3><p>实时显示后台运行任务与待审批交互，支持一键终止。</p></div>
+        <div class="feat"><h3>🔍 调试日志</h3><p>记录所有协议请求/响应，支持一键复制反馈给开发者。</p></div>
+        <div class="feat"><h3>🗑️ 缓存管理</h3><p>设置页可单独清除会话缓存和调试日志，释放存储空间。</p></div>
       </div>
     </div>
   </section>
 
-  <!-- Features -->
-  <section class="features">
-    <div class="container">
-      <h2>✨ 核心功能</h2>
-      <div class="feature-grid">
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>流式实时渲染</h3>
-          <p>思考过程（reasoning）逐字增量显示，不再等思考完成才弹出整段文本。配合自动跟随滚动，阅读体验丝滑。</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🤖</div>
-          <h3>子智能体管理</h3>
-          <p>工具调用卡片内置「查看子智能体」入口，可进入只读子会话查看执行过程，返回自动恢复父会话状态。</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔐</div>
-          <h3>权限与审批</h3>
-          <p>完整支持 permission_request / elicitation_request，在手机上即可审批文件或执行命令。</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📋</div>
-          <h3>任务面板</h3>
-          <p>实时显示后台运行中的任务、待审批交互，支持一键终止任务，信息一目了然。</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔍</div>
-          <h3>调试日志</h3>
-          <p>设置内记录所有协议请求/响应，支持一键复制反馈。可单独清除会话缓存或日志，释放空间。</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎨</div>
-          <h3>Material 3 设计</h3>
-          <p>基于 Jetpack Compose + Material Design 3，支持深色模式、动态取色。中英语言自动切换。</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SEO Keywords -->
-  <section class="keywords">
-    <div class="container">
-      <h2>🏷️ 相关关键词</h2>
-      <div class="tag-cloud">
-        <span class="tag">ZCode</span>
-        <span class="tag">Android客户端</span>
-        <span class="tag">远程桌面</span>
-        <span class="tag">AI助手</span>
-        <span class="tag">智能体</span>
-        <span class="tag">子智能体</span>
-        <span class="tag">流式输出</span>
-        <span class="tag">Cursor</span>
-        <span class="tag">Windsurf</span>
-        <span class="tag">ChatGPT</span>
-        <span class="tag">DeepSeek</span>
-        <span class="tag">Claude</span>
-        <span class="tag">Gemini</span>
-        <span class="tag">GitHub Copilot</span>
-        <span class="tag">MCP</span>
-        <span class="tag">OpenAI</span>
-        <span class="tag">LLM</span>
-        <span class="tag">大模型</span>
-        <span class="tag">编程AI</span>
-        <span class="tag">Kotlin</span>
-        <span class="tag">Jetpack Compose</span>
-        <span class="tag">Material 3</span>
-        <span class="tag">开源</span>
-        <span class="tag">免费</span>
-        <span class="tag">APK</span>
-        <span class="tag">Android</span>
-        <span class="tag">远程办公</span>
-        <span class="tag">权限审批</span>
-        <span class="tag">调试日志</span>
-        <span class="tag">工具调用</span>
-        <span class="tag">Markdown</span>
-        <span class="tag">二维码配对</span>
-        <span class="tag">中文界面</span>
-        <span class="tag">i18n</span>
-        <span class="tag">酷安</span>
-        <span class="tag">应用宝</span>
-        <span class="tag">GitHub</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
   <footer>
     <div class="container">
-      <p>© 2026 Damianjiang · <a href="https://github.com/Damianjiang/ZCode-Android">GitHub</a> ·
-        <a href="https://github.com/Damianjiang/ZCode-Android/releases">下载 releases</a></p>
+      <p>© 2026 Damianjiang · <a href="https://github.com/Damianjiang/ZCode-Android">GitHub</a> · <a href="https://github.com/Damianjiang/ZCode-Android/releases">下载 Releases</a></p>
+      <p style="margin-top:8px">QQ 群：1090759263</p>
     </div>
   </footer>
 

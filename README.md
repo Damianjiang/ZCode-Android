@@ -128,6 +128,11 @@ app/src/main/java/app/zemote/
 
 对话协议的实现细节参考了同项目原 Flutter 版本（协议行为一致）。
 
+## 社区
+
+- **QQ 群**：[1090759263](https://qm.qq.com/q/1090759263) — 使用交流、问题反馈
+- **GitHub Issues**：[github.com/Damianjiang/ZCode-Android/issues](https://github.com/Damianjiang/ZCode-Android/issues)
+
 ## 📄 许可证
 
 MIT。ZCode 名称及相关商标归其权利人所有，本项目与其无任何隶属关系。

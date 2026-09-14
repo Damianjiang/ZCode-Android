@@ -151,6 +151,11 @@ independent:
 Implementation details of the conversation protocol cross-reference the original
 Flutter version of this project (same wire behavior).
 
+## Community
+
+- **QQ Group**: [1090759263](https://qm.qq.com/q/1090759263) — discussions and bug reports
+- **GitHub Issues**: [github.com/Damianjiang/ZCode-Android/issues](https://github.com/Damianjiang/ZCode-Android/issues)
+
 ## 📄 License
 
 MIT. The ZCode name and related trademarks belong to their respective owners; this
