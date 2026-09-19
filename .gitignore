@@ -45,7 +45,7 @@ web-download/app-debug.apk
 # promo video working dir (local only)
 promo/
 .workbuddy/
-.workbuddy/
+.workbuddy-ai/
 
 # git filter-branch 临时目录
 .git-rewrite/
