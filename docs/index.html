@@ -665,8 +665,11 @@ SDK: API 28+ (Android 9.0)<br>
                 document.getElementById('tech-size').textContent = '4.17';
                 document.getElementById('wget-cmd').textContent = 'wget ' + fallback_url;
                 
-                // 显示网络错误提示
-                document.getElementById('download-meta').innerHTML = 'Release版本 · R8混淆优化 · arm64-v8a架构 · <span style="color: #dc2626;">网络连接异常，使用缓存版本</span>';
+                // 显示网络错误提示（根据当前源显示不同文本）
+                const sourceNote = currentSource === 'mirror' 
+                    ? '<span style="color: #dc2626;">国内镜像连接失败，使用缓存版本</span>'
+                    : '<span style="color: #dc2626;">GitHub API连接失败，使用缓存版本</span>';
+                document.getElementById('download-meta').innerHTML = 'Release版本 · R8混淆优化 · arm64-v8a架构 · ' + sourceNote;
             }
         }
         
