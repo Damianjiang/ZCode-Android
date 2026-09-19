@@ -44,3 +44,5 @@ web-download/app-debug.apk
 
 # promo video working dir (local only)
 promo/
+.workbuddy/
+.workbuddy/
