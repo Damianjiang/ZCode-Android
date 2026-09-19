@@ -322,6 +322,10 @@
                 下载 APK (<span id="apk-size">--</span> MB)
             </a>
             <p style="font-size: 13px; color: #888; margin-top: 12px; margin-bottom: 0;" id="download-meta">Release版本 · R8混淆优化 · arm64-v8a架构</p>
+            <p style="font-size: 12px; color: #666; margin-top: 8px;" id="source-status">
+                📍 当前源: <span id="current-source-text">国内镜像</span> | 
+                API状态: <span id="api-status">加载中...</span>
+            </p>
         </div>
 
         <!-- Screenshots -->
@@ -381,6 +385,7 @@ SDK: API 28+ (Android 9.0)<br>
             <h2>其他方式下载</h2>
             <p style="font-size: 14px; color: #555; margin-bottom: 12px;">命令行下载：</p>
             <div class="code-block" id="wget-cmd"># 正在获取链接...</div>
+            <p style="font-size: 11px; color: #999; margin-top: 8px; word-break: break-all;" id="debug-url">调试URL: --</p>
         </div>
 
         <!-- FAQ -->
@@ -429,11 +434,23 @@ SDK: API 28+ (Android 9.0)<br>
         
         // 切换源
         function switchSource(source) {
+            console.log('[切换源] 从:', currentSource, '切换到:', source);
             currentSource = source;
             
             // 更新按钮状态
             document.getElementById('btn-mirror').classList.toggle('active', source === 'mirror');
             document.getElementById('btn-github').classList.toggle('active', source === 'github');
+            
+            // 更新源状态显示（添加动画效果）
+            const sourceText = source === 'mirror' ? '国内镜像 (gh-proxy)' : 'GitHub官方';
+            const sourceEl = document.getElementById('current-source-text');
+            sourceEl.textContent = sourceText;
+            sourceEl.style.color = source === 'mirror' ? '#166534' : '#2563eb';
+            sourceEl.style.fontWeight = 'bold';
+            setTimeout(() => { sourceEl.style.fontWeight = 'normal'; }, 1000);
+            
+            // 显示切换提示
+            console.log('[切换源] 即将重新加载数据...');
             
             // 重新加载数据
             fetchLatestRelease();
@@ -493,10 +510,12 @@ SDK: API 28+ (Android 9.0)<br>
         
         // 页面加载时获取最新版本信息
         async function fetchLatestRelease() {
+            console.log('[fetchLatestRelease] 当前源:', currentSource);
+            const api_url = currentSource === 'mirror'
+                ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases/latest'
+                : 'https://api.github.com/repos/' + REPO + '/releases/latest';
+            console.log('[fetchLatestRelease] 请求URL:', api_url);
             try {
-                const api_url = currentSource === 'mirror'
-                    ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases/latest'
-                    : 'https://api.github.com/repos/' + REPO + '/releases/latest';
                     
                 const response = await fetch(api_url);
                 const data = await response.json();
@@ -519,11 +538,15 @@ SDK: API 28+ (Android 9.0)<br>
                     document.getElementById('wget-cmd').textContent = 'wget ' + download_url;
                     
                     console.log('Latest release:', data.tag_name, apk.name, '- Source:', currentSource);
+                    document.getElementById('api-status').textContent = '✓ 成功';
+                    document.getElementById('api-status').style.color = '#166534';
                 } else {
                     console.warn('No APK found in release assets');
                 }
             } catch (e) {
                 console.error('Failed to fetch latest release:', e);
+                document.getElementById('debug-url').textContent = '错误: ' + e.message;
+                document.getElementById('debug-url').style.color = '#dc2626';
                 // 使用硬编码版本作为fallback
                 document.getElementById('latest-version').textContent = 'v1.9.4';
                 const fallback_url = currentSource === 'mirror'
