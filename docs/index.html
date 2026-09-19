@@ -305,6 +305,18 @@
                 <div class="source-info">直连 GitHub API</div>
             </button>
         </div>
+        <!-- Source Selector -->
+        <div class="source-selector">
+            <button class="source-btn active" onclick="switchSource('mirror')" id="btn-mirror">
+                🇨🇳 国内镜像
+                <div class="source-info">使用 gh-proxy 加速</div>
+            </button>
+            <button class="source-btn" onclick="switchSource('github')" id="btn-github">
+                🌐 GitHub官方
+                <div class="source-info">直连 GitHub API</div>
+            </button>
+        </div>
+        
         <!-- Download -->
         <div class="card">
             <div class="version-badge">
