@@ -1,11 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#161616" />
     <meta name="color-scheme" content="dark" />
-    <!-- Bugfix: Chrome dev 下可能不发 favicon 网络请求；内嵌小尺寸 App 图标，避免标签页回退到默认图标。 -->
+    <!-- Bugfix: Chrome dev 涓嬪彲鑳戒笉鍙?favicon 缃戠粶璇锋眰锛涘唴宓屽皬灏哄 App 鍥炬爣锛岄伩鍏嶆爣绛鹃〉鍥為€€鍒伴粯璁ゅ浘鏍囥€?-->
     <link
       rel="icon"
       type="image/png"
@@ -15,9 +15,7 @@
     <title>ZCode</title>
     <script>
       (() => {
-        // Bugfix: Web 远控跨 workspace 跳转时，JS bundle 还没执行前就会先渲染启动壳。
-        // 这里提前按本地主题偏好决定首屏底色，避免 dark 用户在这一帧看到白底闪烁。
-        const STORAGE_KEY = "zcode-theme";
+        // Bugfix: Web 杩滄帶璺?workspace 璺宠浆鏃讹紝JS bundle 杩樻病鎵ц鍓嶅氨浼氬厛娓叉煋鍚姩澹炽€?        // 杩欓噷鎻愬墠鎸夋湰鍦颁富棰樺亸濂藉喅瀹氶灞忓簳鑹诧紝閬垮厤 dark 鐢ㄦ埛鍦ㄨ繖涓€甯х湅鍒扮櫧搴曢棯鐑併€?        const STORAGE_KEY = "zcode-theme";
         const DEFAULT_THEME = "zai-dark";
         const BROWSER_THEME_COLORS = {
           dark: "#161616",
@@ -57,7 +55,7 @@
                   typeof snapshot.background === "string"
                     ? snapshot.background
                     : normalizedTheme === "dark"
-                      ? "#0f172a"
+                      ? "#18181b"
                       : "#f8fafc",
                 );
                 document.documentElement.style.setProperty(
@@ -117,7 +115,7 @@
       }
 
       body {
-        background: var(--zcode-bootstrap-bg, var(--color-background, #0f172a));
+        background: var(--zcode-bootstrap-bg, var(--color-background, #18181b));
         color: var(--zcode-bootstrap-fg, var(--color-foreground, #e2e8f0));
         font-family:
           Inter,
@@ -135,8 +133,8 @@
       html[data-zcode-browser-theme-surface],
       html[data-zcode-browser-theme-surface] body,
       html[data-zcode-browser-theme-surface] #root {
-        /* 修复原因：共享 UI 样式为 Electron vibrancy 强制透明根背景；浏览器入口必须用语义背景
-           覆盖该桌面专属行为，否则浏览器工具栏、overscroll 和页面画布会回退为系统白色。 */
+        /* 淇鍘熷洜锛氬叡浜?UI 鏍峰紡涓?Electron vibrancy 寮哄埗閫忔槑鏍硅儗鏅紱娴忚鍣ㄥ叆鍙ｅ繀椤荤敤璇箟鑳屾櫙
+           瑕嗙洊璇ユ闈笓灞炶涓猴紝鍚﹀垯娴忚鍣ㄥ伐鍏锋爮銆乷verscroll 鍜岄〉闈㈢敾甯冧細鍥為€€涓虹郴缁熺櫧鑹层€?*/
         background: var(--color-background, var(--zcode-bootstrap-bg, #161616)) !important;
       }
 
@@ -152,8 +150,8 @@
         justify-content: center;
         width: 100%;
         height: 100%;
-        /* Bugfix: UI 全局样式会把 body/#root 置为透明，预渲染壳必须自己承接主题背景，否则深色主题会露出浏览器白底。 */
-        background: var(--zcode-bootstrap-bg, var(--color-background, #0f172a));
+        /* Bugfix: UI 鍏ㄥ眬鏍峰紡浼氭妸 body/#root 缃负閫忔槑锛岄娓叉煋澹冲繀椤昏嚜宸辨壙鎺ヤ富棰樿儗鏅紝鍚﹀垯娣辫壊涓婚浼氶湶鍑烘祻瑙堝櫒鐧藉簳銆?*/
+        background: var(--zcode-bootstrap-bg, var(--color-background, #18181b));
         color: var(--zcode-bootstrap-fg, var(--color-foreground, #e2e8f0));
       }
 
@@ -181,7 +179,7 @@
         inset: 0;
         pointer-events: none;
         content: "";
-        /* 修复原因：启动 logo 壳是固定深色底，边框不能跟随浅色主题 token，否则首屏边框过重。 */
+        /* 淇鍘熷洜锛氬惎鍔?logo 澹虫槸鍥哄畾娣辫壊搴曪紝杈规涓嶈兘璺熼殢娴呰壊涓婚 token锛屽惁鍒欓灞忚竟妗嗚繃閲嶃€?*/
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: inherit;
       }
@@ -192,7 +190,7 @@
         color: #ffffff;
       }
     </style>
-    <script type="module" crossorigin src="/remote/v4/assets/index-BZagIv7p.js"></script>
+    <script type="module" crossorigin src="/remote/v4/assets/index-nOVzQNKW.js"></script>
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-Bj-mKKzh.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/preload-helper-Di38CId4.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/bundle-mjs-BfbS5Wiv.js">
@@ -205,7 +203,7 @@
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/triangle-alert-WsNff4EO.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/x-FufZ8lYU.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/react-dom-CbuiB7QO.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/toast-BKGoswm7.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/toast-HRdaJheI.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/string-DhPFM08H.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/src-BwV4lmkS.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/dist-DmBvo4GG.js">
@@ -217,7 +215,7 @@
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/identity-BD_1HS5g.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-5PVQY5BW-Bhs1I3_F.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-U2HBQHQK-B1CX917C.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-BO2N2NFS-CVaPjDUy.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-BO2N2NFS-4Ytn9XPz.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/katex-BTKZ3E6l.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/isEmpty-WzPW3d10.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/arrow-left-from-line-BpBWhNda.js">
@@ -251,15 +249,15 @@
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/line-z1sxs0U8.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-BSJP7CBP-CXC6kCEx.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-ENJZ2VHE-iER9z-cF.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-336JU56O-CYmMaDOS.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-336JU56O-jCJn5wsW.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-426QAEUC-CgWX8DKL.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chunk-XPW4576I-CsWxC0_l.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/src-wmk2orCZ.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/IntlProvider-D2bfNJ9H.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/keyboardShortcuts-CdEwcjAx.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/logger-CGtt9Vh1.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/catalogTree-BaRvxrYa.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/imeComposition--BAzr5WB.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/src-DHgFesxz.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/IntlProvider-BDZANi-i.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/keyboardShortcuts-B8FrfU2R.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/logger-BVohFQ23.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/catalogTree-P8S5ypDb.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/imeComposition-DqvuWWJP.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/esm-CdLAonLj.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/chevron-left-C-R-OEcc.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/folder-open-BzEqQ08P.js">
@@ -271,14 +269,14 @@
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/sparkles-Cjb2nnuP.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/zoom-in-OQPTtqHH.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/zoom-out-VYhIBMzN.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/usageStatsUiParts-CMKAY5eG.js">
+    <link rel="modulepreload" crossorigin href="/remote/v4/assets/usageStatsUiParts-_hjTC0l-.js">
     <link rel="modulepreload" crossorigin href="/remote/v4/assets/officeFilePreview-BPR8vWzZ.js">
-    <link rel="modulepreload" crossorigin href="/remote/v4/assets/appUsageChartPalette-B0TiX6zE.js">
-    <link rel="stylesheet" crossorigin href="/remote/v4/assets/index-DYuqjVLH.css">
+    
+    <link rel="stylesheet" crossorigin href="/remote/v4/assets/index-BMndL2ru.css">
   </head>
   <body>
     <div id="root">
-      <!-- Bugfix: 远程控制跨 workspace 时会整页跳转；在 JS 入口执行前先给出 loading 壳，避免出现白屏空档。 -->
+      <!-- Bugfix: 杩滅▼鎺у埗璺?workspace 鏃朵細鏁撮〉璺宠浆锛涘湪 JS 鍏ュ彛鎵ц鍓嶅厛缁欏嚭 loading 澹筹紝閬垮厤鍑虹幇鐧藉睆绌烘。銆?-->
       <div
         class="zcode-boot-loading"
         role="status"
@@ -333,3 +331,4 @@
     </div>
   </body>
 </html>
+
