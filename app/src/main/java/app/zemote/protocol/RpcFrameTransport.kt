@@ -111,7 +111,8 @@ class RpcFrameTransport(
         val chunk = try { android.util.Base64.decode(dataBase64, android.util.Base64.NO_WRAP) } catch (_: Exception) { return true }
 
         val assembly = assemblies.getOrPut(msgSeqVal) {
-            Assembly(crc32 = checksum ?: "", count = fragCount).also { assemblies[msgSeqVal] = it }
+            Assembly(crc32 = checksum ?: "", count = fragCount)
+        }
         assembly.fragments[fragIdx] = chunk
         assembly.lastSeen = System.currentTimeMillis()
 
