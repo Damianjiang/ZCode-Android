@@ -238,6 +238,43 @@
             color: #2563eb;
             text-decoration: underline;
         }
+
+        /* Source Selector */
+        .source-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .source-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .source-btn:hover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .source-btn.active {
+            border-color: #2563eb;
+            background: #2563eb;
+            color: white;
+        }
+        .source-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
 </style>
 </head>
 <body>
@@ -257,6 +294,17 @@
             </a>
         </header>
 
+        <!-- Source Selector -->
+        <div class="source-selector">
+            <button class="source-btn active" onclick="switchSource('mirror')" id="btn-mirror">
+                🇨🇳 国内镜像
+                <div class="source-info">使用 gh-proxy 加速</div>
+            </button>
+            <button class="source-btn" onclick="switchSource('github')" id="btn-github">
+                🌐 GitHub官方
+                <div class="source-info">直连 GitHub API</div>
+            </button>
+        </div>
         <!-- Download -->
         <div class="card">
             <div class="version-badge">
