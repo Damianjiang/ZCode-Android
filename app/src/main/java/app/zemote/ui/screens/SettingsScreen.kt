@@ -1,0 +1,326 @@
+package app.zemote.ui.screens
+
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.ClearAll
+import androidx.compose.material.icons.rounded.HistoryEdu
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import app.zemote.BuildConfig
+import app.zemote.R
+import app.zemote.state.AppSettings
+import app.zemote.state.AISettings
+import app.zemote.state.LanguagePrefs
+import app.zemote.state.PrivacySettings
+import app.zemote.ui.logger.ZemoteLogger
+import app.zemote.ui.theme.ThemeManager
+import kotlinx.coroutines.launch
+
+/** 设置页（底部栏 Tab）：外观入口 / 关于 / 更新日志入口 */
+@Composable
+fun SettingsScreen(
+    session: app.zemote.state.AppSessionViewModel? = null,
+    onOpenPersonalize: () -> Unit = {},
+    onOpenAISettings: () -> Unit = {},
+    onOpenFeedback: () -> Unit = {},
+    onOpenChangelog: () -> Unit = {},
+    onOpenLogs: () -> Unit = {},
+    onOpenCacheClean: () -> Unit = {},
+) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var debugLogEnabled by remember { mutableStateOf(ZemoteLogger.enabled) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding(),
+    ) {
+        Text(
+            stringResource(R.string.settings_title),
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            val currentLang = LanguagePrefs.get(ctx)
+            val langName = when (currentLang) {
+                LanguagePrefs.ZH -> stringResource(R.string.lang_chinese)
+                LanguagePrefs.EN -> stringResource(R.string.lang_english)
+                else -> stringResource(R.string.lang_follow_system)
+            }
+            var showLangDialog by remember { mutableStateOf(false) }
+
+            SectionLabel(stringResource(R.string.section_ai))
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.Settings,
+                    title = stringResource(R.string.ai_settings_title),
+                    subtitle = stringResource(R.string.thought_level_label),
+                    onClick = onOpenAISettings,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+
+            SectionLabel(stringResource(R.string.section_privacy))
+            SettingsCard {
+                Column {
+                    SettingRow(
+                        icon = Icons.Rounded.Lock,
+                        title = stringResource(R.string.privacy_optimize_label),
+                        subtitle = stringResource(R.string.privacy_optimize_sub),
+                        trailing = { Switch(checked = PrivacySettings.optimizeAgentExperience, onCheckedChange = { PrivacySettings.optimizeAgentExperience = it }) },
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                }
+            }
+
+            SectionLabel(stringResource(R.string.section_feedback))
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.BugReport,
+                    title = stringResource(R.string.feedback_title),
+                    subtitle = stringResource(R.string.feedback_description),
+                    onClick = onOpenFeedback,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+
+            SectionLabel(stringResource(R.string.section_appearance))
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.Palette,
+                    title = stringResource(R.string.personalize),
+                    subtitle = stringResource(R.string.personalize_sub),
+                    onClick = onOpenPersonalize,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+                SettingRow(
+                    icon = Icons.Rounded.Language,
+                    title = stringResource(R.string.language_label),
+                    subtitle = langName,
+                    onClick = { showLangDialog = true },
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+
+            SectionLabel(stringResource(R.string.section_debug))
+            SettingsCard {
+                Column {
+                    SettingRow(
+                        icon = Icons.Rounded.BugReport,
+                        title = stringResource(R.string.debug_logs),
+                        subtitle = if (debugLogEnabled) stringResource(R.string.debug_logs_on) else stringResource(R.string.debug_logs_off),
+                        onClick = { debugLogEnabled = !debugLogEnabled; ZemoteLogger.enabled = debugLogEnabled },
+                        trailing = { Switch(checked = debugLogEnabled, onCheckedChange = { debugLogEnabled = it; ZemoteLogger.enabled = it }) },
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.debug_logs_view),
+                        subtitle = stringResource(R.string.debug_logs_view_sub),
+                        onClick = onOpenLogs,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                }
+            }
+
+            SectionLabel(stringResource(R.string.section_about))
+            SettingsCard {
+                Column {
+                    SettingRow(
+                        icon = Icons.Rounded.Info,
+                        title = stringResource(R.string.version_label),
+                        subtitle = BuildConfig.VERSION_NAME,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                    SettingRow(
+                        icon = Icons.Rounded.HistoryEdu,
+                        title = stringResource(R.string.changelog),
+                        subtitle = stringResource(R.string.changelog_sub),
+                        onClick = onOpenChangelog,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
+                }
+            }
+
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.Person,
+                    title = stringResource(R.string.author_line),
+                    subtitle = stringResource(R.string.issues_line),
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Damianjiang/ZCode-Android"))
+                            )
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                )
+            }
+
+            if (showLangDialog) {
+                val activity = ctx as? ComponentActivity
+                AlertDialog(
+                    onDismissRequest = { showLangDialog = false },
+                    title = { Text(stringResource(R.string.language_label)) },
+                    text = {
+                        Column {
+                            LanguagePrefs.options.forEach { opt ->
+                                val name = when (opt) {
+                                    LanguagePrefs.ZH -> stringResource(R.string.lang_chinese)
+                                    LanguagePrefs.EN -> stringResource(R.string.lang_english)
+                                    else -> stringResource(R.string.lang_follow_system)
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            LanguagePrefs.set(ctx, opt)
+                                            showLangDialog = false
+                                            activity?.recreate()
+                                        }
+                                        .padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(selected = currentLang == opt, onClick = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(name, style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {},
+                )
+            }
+
+            Text(
+                stringResource(R.string.about_footer),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 6.dp, bottom = 28.dp),
+            )
+        }
+
+        SnackbarHost(hostState = snackbarHostState)
+    }
+}
+
+@Composable
+internal fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 6.dp, top = 6.dp),
+    )
+}
+
+@Composable
+internal fun SettingsCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        content()
+    }
+}
+
+@Composable
+internal fun SettingRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        trailing?.invoke()
+    }
+}

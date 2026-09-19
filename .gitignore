@@ -1,0 +1,54 @@
+# Gradle
+.gradle/
+build/
+
+# Kotlin
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Local configuration（含本机 SDK 路径，勿提交）
+local.properties
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
+nul
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 构建产物 APK 只通过 GitHub Releases 分发，不入库
+web-download/app-debug.apk
+
+# 调试截图（根目录的临时 png，screenshots/ 下的 README 截图除外）
+/*.png
+!screenshots/*.png
+
+.api_push.py
+.api_push2.py
+
+# 官方 JS 逆向分析产物（不入库）
+.webref/
+
+# 临时协议实验脚本
+.proto_exp.py
+.proto_exp2.py
+
+# promo video working dir (local only)
+promo/
+.workbuddy/
+.workbuddy-ai/
+
+# git filter-branch 临时目录
+.git-rewrite/
+
+# git filter-branch 临时目录
+.git-rewrite/
