@@ -107,9 +107,7 @@
         /* Responsive */
         @media (max-width: 768px) {
             h1 { font-size: 36px; }
-            .screenshots { grid-template-columns: 1fr; }
-            .features { grid-template-columns: 1fr; }
-            .details-grid { grid-template-columns: 1fr; }
+            .screenshots, .features, .details-grid { grid-template-columns: 1fr; }
             .cta-section { padding: 40px 24px; }
             .cta-section h2 { font-size: 24px; }
         }
@@ -128,15 +126,15 @@
         <div class="hero">
             <div class="hero-badge">
                 <span class="dot"></span>
-                <span id="latest-version">加载中...</span>
+                <span>最新版本: <strong id="latest-version">加载中...</strong></span>
             </div>
             <h2 style="font-size: 28px; font-weight: 600; color: #5c4033; margin-bottom: 16px;">随时随地的远程桌面控制</h2>
             <p style="color: #8b7355; font-size: 16px; max-width: 600px; margin: 0 auto 32px;">通过Android手机远程控制桌面，支持BigModel/ZCode模型选择，深度思考等级调节，让移动办公更加高效。</p>
             <a href="#" id="download-btn" class="download-btn" target="_blank">
                 <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                下载 Release APK
+                <span id="download-text">下载 Release APK</span>
             </a>
-            <p class="download-meta">Release版本 · R8混淆优化 · arm64-v8a架构 · 4.17 MB</p>
+            <p class="download-meta" id="download-meta">加载中...</p>
         </div>
 
         <!-- App Preview -->
@@ -216,7 +214,7 @@
                 </div>
                 <div class="detail-item">
                     <div class="label">APK大小</div>
-                    <div class="value">4.17 MB</div>
+                    <div class="value" id="apk-size">--</div>
                 </div>
                 <div class="detail-item">
                     <div class="label">许可证</div>
@@ -235,7 +233,7 @@
             </div>
             <div id="tab-web" class="tab-content active">
                 <p style="color: #8b7355; margin-bottom: 16px;">点击下方按钮直接下载 Release APK，推荐在Android设备上安装。</p>
-                <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="download-btn" target="_blank" style="font-size: 14px; padding: 14px 28px;">
+                <a href="#" id="download-btn2" class="download-btn" target="_blank" style="font-size: 14px; padding: 14px 28px;">
                     下载 APK
                 </a>
             </div>
@@ -245,8 +243,7 @@
             </div>
             <div id="tab-cli" class="tab-content">
                 <p style="color: #8b7355; margin-bottom: 16px;">使用命令行工具下载：</p>
-                <div class="code-block">wget https://github.com/Damianjiang/ZCode-Android/releases/latest/download/app-release.apk</div>
-                <div class="code-block" style="margin-top: 8px;">curl -O https://github.com/Damianjiang/ZCode-Android/releases/latest/download/app-release.apk</div>
+                <div class="code-block" id="wget-cmd"># 请先访问 Releases 页面获取最新版本链接</div>
             </div>
         </div>
 
@@ -276,11 +273,11 @@
         </div>
 
         <!-- CTA -->
-        <div class="cta-section" id="cta-section">
-            <h2 id="cta-title">立即体验远程控制</h2>
+        <div class="cta-section">
+            <h2>立即体验远程控制</h2>
             <p>让你的手机成为强大的远程桌面控制工具</p>
-            <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="cta-btn" target="_blank">
-                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span id="download-text">下载 Release APK</span>
+            <a href="#" id="cta-btn" class="cta-btn" target="_blank">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                 下载 Release APK
             </a>
         </div>
@@ -299,49 +296,60 @@
     </div>
 
     <script>
+        // GitHub仓库信息（公开API，无需token）
+        const REPO = 'Damianjiang/ZCode-Android';
+        
+        // 从GitHub获取最新版本信息
+        async function fetchLatestRelease() {
+            try {
+                const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                
+                const data = await response.json();
+                
+                // 更新版本号显示
+                const versionEl = document.getElementById('latest-version');
+                if (versionEl) {
+                    versionEl.textContent = data.tag_name;
+                }
+                
+                // 查找APK文件
+                const apk = data.assets.find(a => a.name.includes('release.apk'));
+                if (apk) {
+                    const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
+                    
+                    // 更新所有下载按钮链接
+                    document.getElementById('download-btn').href = apk.browser_download_url;
+                    document.getElementById('download-btn2').href = apk.browser_download_url;
+                    document.getElementById('cta-btn').href = apk.browser_download_url;
+                    
+                    // 更新下载文本
+                    document.getElementById('download-text').textContent = `下载 ${apk.name}`;
+                    document.getElementById('apk-size').textContent = sizeMB + ' MB';
+                    document.getElementById('download-meta').textContent = `Release版本 · R8混淆优化 · arm64-v8a架构 · ${sizeMB} MB`;
+                    
+                    // 更新wget命令
+                    document.getElementById('wget-cmd').textContent = `wget ${apk.browser_download_url}`;
+                    
+                    console.log('Latest release:', data.tag_name, apk.name);
+                } else {
+                    console.warn('No APK found in release assets');
+                }
+                
+            } catch (e) {
+                console.error('Failed to fetch release:', e);
+                // 降级显示默认版本
+                document.getElementById('latest-version').textContent = 'v1.9.4';
+                document.getElementById('download-meta').textContent = 'Release版本 · R8混淆优化 · arm64-v8a架构';
+            }
+        }
+        
+        // Tab切换功能
         function showTab(name) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + name).classList.add('active');
             event.target.classList.add('active');
-        }
-    </script>
-
-    <script>
-        async function fetchLatestRelease() {
-            try {
-                const response = await fetch('https://api.github.com/repos/Damianjiang/ZCode-Android/releases/latest');
-                const data = await response.json();
-                
-                // 更新版本号
-                const versionEl = document.getElementById('latest-version');
-                if (versionEl) versionEl.textContent = data.tag_name;
-                
-                // 更新下载按钮链接
-                const downloadBtn = document.getElementById('download-btn');
-                if (downloadBtn && data.assets) {
-                    const apk = data.assets.find(a => a.name.includes('release.apk'));
-                    if (apk) {
-                        downloadBtn.href = apk.browser_download_url;
-                        document.getElementById('download-text').textContent = '下载 ' + apk.name + ' (' + (apk.size / 1024 / 1024).toFixed(2) + ' MB)';
-                    }
-                }
-                
-                // 更新CTA按钮
-                const ctaBtn = document.querySelector('.cta-section a');
-                if (ctaBtn && data.assets) {
-                    const apk = data.assets.find(a => a.name.includes('release.apk'));
-                    if (apk) {
-                        ctaBtn.href = apk.browser_download_url;
-                    }
-                }
-                
-                console.log('Latest version:', data.tag_name);
-            } catch (e) {
-                console.error('Failed to fetch release:', e);
-                const versionEl = document.getElementById('latest-version');
-                if (versionEl) versionEl.textContent = 'v1.9.4';
-            }
         }
         
         // 页面加载时获取最新版本
