@@ -343,5 +343,12 @@ SDK: API 28+ (Android 9.0)<br>
                 });
             }
         });
-</body>
+    <script>
+        // 硬编码版本信息（避免CSP限制）
+        document.getElementById('latest-version').textContent = 'v1.9.4';
+        document.getElementById('download-btn').href = 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+        document.getElementById('apk-size').textContent = '4.17';
+        document.getElementById('tech-size').textContent = '4.17';
+        document.getElementById('wget-cmd').textContent = 'wget https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+    </script></body>
 </html>
