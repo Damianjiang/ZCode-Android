@@ -3,143 +3,298 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZCode Android - 远程控制客户端</title>
+    <title>ZCode Android - Android端ZCode远程控制客户端 | 远程桌面管理工具</title>
+    <meta name="description" content="ZCode Android是ZCode的远程控制客户端，支持Android手机远程连接桌面端，提供会话管理、文件传输、屏幕共享等功能。基于WebSocket协议实现，安全可靠。">
+    <meta name="keywords" content="ZCode,Android客户端,远程控制,远程桌面,移动办公,Zemote,桌面控制,多设备管理,Android App,远程协助">
+    <meta name="author" content="Damian2012">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="ZCode Android - 远程桌面控制客户端">
+    <meta property="og:description" content="通过Android手机远程控制桌面，支持会话管理、文件传输、屏幕共享等功能">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://damianjiang.github.io/ZCode-Android/">
+    <meta property="og:image" content="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step1_home.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ZCode Android - 远程桌面控制客户端">
+    <meta name="twitter:description" content="Android端ZCode远程控制客户端">
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #faf6f1;
             color: #3d3229;
-            line-height: 1.6;
+            line-height: 1.8;
         }
         .container { max-width: 900px; margin: 0 auto; padding: 60px 32px; }
         
         /* Header */
-        header { text-align: center; margin-bottom: 60px; }
-        .logo { width: 80px; height: 80px; background: #5c4033; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 36px; }
-        h1 { font-size: 48px; font-weight: 700; color: #5c4033; margin-bottom: 12px; }
-        .tagline { font-size: 18px; color: #8b7355; }
+        header { text-align: center; margin-bottom: 60px; padding: 40px 0; }
+        .logo { width: 88px; height: 88px; background: #5c4033; border-radius: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; font-size: 40px; box-shadow: 0 8px 32px rgba(92,64,51,0.15); }
+        h1 { font-size: 52px; font-weight: 700; color: #5c4033; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .tagline { font-size: 20px; color: #8b7355; font-weight: 300; }
         
         /* Cards */
-        .card { background: white; border-radius: 24px; padding: 32px; margin-bottom: 24px; border: 1px solid #e8dcc8; }
-        .card-title { font-size: 22px; font-weight: 600; color: #5c4033; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
-        .card-title::before { content: ''; width: 4px; height: 24px; background: #8b9d77; border-radius: 2px; }
+        .card { background: white; border-radius: 28px; padding: 36px; margin-bottom: 28px; border: 1px solid #e8dcc8; box-shadow: 0 4px 24px rgba(92,64,51,0.06); }
+        .card-title { font-size: 24px; font-weight: 600; color: #5c4033; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+        .card-title::before { content: ''; width: 5px; height: 28px; background: linear-gradient(to bottom, #8b9d77, #6b7c5c); border-radius: 3px; }
+        .card p { color: #6b5b4f; margin-bottom: 12px; }
         
-        /* Download */
-        .download-btn { display: inline-flex; align-items: center; gap: 12px; background: #5c4033; color: white; padding: 18px 36px; border-radius: 100px; text-decoration: none; font-weight: 500; font-size: 16px; transition: all 0.3s; }
-        .download-btn:hover { background: #6b7c5c; transform: translateY(-2px); }
-        .version-badge { display: inline-flex; align-items: center; gap: 8px; background: #8b9d77; color: white; padding: 8px 16px; border-radius: 100px; font-size: 14px; margin-bottom: 20px; }
+        /* Hero Section */
+        .hero { text-align: center; padding: 60px 0; }
+        .hero-badge { display: inline-flex; align-items: center; gap: 10px; background: #8b9d77; color: white; padding: 12px 24px; border-radius: 100px; font-size: 14px; font-weight: 500; margin-bottom: 28px; }
+        .hero-badge .dot { width: 10px; height: 10px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        
+        .download-btn { display: inline-flex; align-items: center; gap: 14px; background: #5c4033; color: white; padding: 22px 44px; border-radius: 100px; text-decoration: none; font-weight: 500; font-size: 18px; transition: all 0.3s ease; box-shadow: 0 6px 24px rgba(92,64,51,0.25); }
+        .download-btn:hover { background: #6b7c5c; transform: translateY(-3px); box-shadow: 0 12px 32px rgba(92,64,51,0.3); }
+        .download-meta { margin-top: 20px; font-size: 14px; color: #8b7355; }
         
         /* Screenshots */
-        .screenshots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
-        .screenshot { border-radius: 16px; overflow: hidden; border: 1px solid #e8dcc8; aspect-ratio: 9/16; }
-        .screenshot img { width: 100%; height: 100%; object-fit: cover; }
+        .screenshots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 24px; }
+        .screenshot { border-radius: 20px; overflow: hidden; border: 1px solid #e8dcc8; background: white; aspect-ratio: 9/16; position: relative; }
+        .screenshot img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
+        .screenshot:hover img { transform: scale(1.03); }
+        .screenshot-caption { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(transparent, rgba(0,0,0,0.6)); color: white; padding: 20px 12px 12px; font-size: 12px; }
         
         /* Features */
-        .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-        .feature { background: #faf6f1; border-radius: 16px; padding: 24px; border: 1px solid #e8dcc8; }
-        .feature h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: #5c4033; }
-        .feature p { font-size: 14px; color: #8b7355; }
+        .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+        .feature { background: #faf6f1; border-radius: 20px; padding: 28px; border: 1px solid #e8dcc8; transition: all 0.3s ease; }
+        .feature:hover { background: white; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(92,64,51,0.08); }
+        .feature-icon { width: 56px; height: 56px; background: linear-gradient(135deg, #8b9d77, #6b7c5c); border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+        .feature-icon svg { width: 28px; height: 28px; color: white; }
+        .feature h3 { font-size: 18px; font-weight: 600; margin-bottom: 10px; color: #5c4033; }
+        .feature p { font-size: 14px; color: #8b7355; line-height: 1.7; }
         
-        /* Version List */
-        .version-list { list-style: none; }
-        .version-list li { padding: 12px 0; border-bottom: 1px solid #e8dcc8; display: flex; justify-content: space-between; }
-        .version-list li:last-child { border-bottom: none; }
-        .version-list .ver { font-weight: 600; color: #5c4033; }
-        .version-list .desc { font-size: 14px; color: #8b7355; }
+        /* Details Grid */
+        .details-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+        .detail-item { background: #faf6f1; border-radius: 16px; padding: 20px; border: 1px solid #e8dcc8; text-align: center; }
+        .detail-item .label { font-size: 12px; color: #8b7355; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+        .detail-item .value { font-size: 18px; font-weight: 600; color: #5c4033; }
         
         /* Tabs */
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-        .tab { padding: 8px 16px; background: transparent; border: 1px solid #e8dcc8; border-radius: 100px; cursor: pointer; font-size: 14px; color: #8b7355; transition: all 0.2s; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab { padding: 12px 24px; background: transparent; border: 1px solid #e8dcc8; border-radius: 100px; cursor: pointer; font-size: 15px; color: #8b7355; transition: all 0.2s ease; }
+        .tab:hover { border-color: #8b9d77; color: #6b7c5c; }
         .tab.active { background: #5c4033; border-color: #5c4033; color: white; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .code-block { background: #2a2520; color: #e8e0d5; padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; overflow-x: auto; }
+        .code-block { background: #2a2520; color: #e8e0d5; padding: 20px; border-radius: 16px; font-family: 'Consolas', monospace; font-size: 14px; overflow-x: auto; margin: 12px 0; line-height: 1.7; }
         
-        /* Requirements */
-        .requirements { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        .req-item { background: #faf6f1; padding: 16px 20px; border-radius: 12px; border: 1px solid #e8dcc8; }
-        .req-item .label { font-size: 12px; color: #8b7355; margin-bottom: 4px; }
-        .req-item .value { font-size: 15px; font-weight: 500; color: #5c4033; }
+        /* FAQ */
+        .faq-item { border-bottom: 1px solid #e8dcc8; padding: 20px 0; }
+        .faq-item:last-child { border-bottom: none; }
+        .faq-question { font-size: 16px; font-weight: 600; color: #5c4033; margin-bottom: 10px; }
+        .faq-answer { font-size: 15px; color: #6b5b4f; line-height: 1.8; }
+        
+        /* CTA Section */
+        .cta-section { background: #5c4033; color: white; border-radius: 32px; padding: 60px 40px; text-align: center; margin: 40px 0; }
+        .cta-section h2 { font-size: 32px; font-weight: 700; margin-bottom: 16px; color: white; }
+        .cta-section p { font-size: 18px; color: rgba(255,255,255,0.8); margin-bottom: 32px; }
+        .cta-btn { display: inline-flex; align-items: center; gap: 12px; background: white; color: #5c4033; padding: 18px 36px; border-radius: 100px; text-decoration: none; font-weight: 600; font-size: 16px; transition: all 0.3s; }
+        .cta-btn:hover { background: #faf6f1; transform: translateY(-2px); }
         
         /* Footer */
-        footer { text-align: center; padding-top: 40px; color: #8b7355; font-size: 14px; }
-        footer a { color: #5c4033; text-decoration: none; }
+        footer { text-align: center; padding: 60px 0 40px; color: #8b7355; font-size: 14px; }
+        footer a { color: #5c4033; text-decoration: none; border-bottom: 1px solid #e8dcc8; transition: border-color 0.2s; }
+        footer a:hover { border-color: #8b9d77; }
+        .footer-links { display: flex; justify-content: center; gap: 24px; margin-bottom: 20px; flex-wrap: wrap; }
+        .footer-links a { border: none; }
         
-        @media (max-width: 640px) {
-            h1 { font-size: 32px; }
-            .screenshots, .features, .requirements { grid-template-columns: 1fr; }
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 36px; }
+            .screenshots { grid-template-columns: 1fr; }
+            .features { grid-template-columns: 1fr; }
+            .details-grid { grid-template-columns: 1fr; }
+            .cta-section { padding: 40px 24px; }
+            .cta-section h2 { font-size: 24px; }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <header>
             <div class="logo">📱</div>
             <h1>ZCode Android</h1>
-            <p class="tagline">ZCode 远程控制客户端 · 协议复刻，独立实现</p>
+            <p class="tagline">Android端 ZCode 远程控制客户端 · 协议复刻，独立实现</p>
         </header>
 
-        <div class="card">
-            <div class="version-badge">
-                <span id="latest-version">v1.9.4</span>
+        <!-- Hero -->
+        <div class="hero">
+            <div class="hero-badge">
+                <span class="dot"></span>
+                <span>最新版本: v1.9.4</span>
             </div>
-            <p style="color: #8b7355; margin-bottom: 20px;">安全、快速的 Android 远程桌面控制应用，支持 BigModel / ZCode 模型提供商，深度思考等级调节。</p>
+            <h2 style="font-size: 28px; font-weight: 600; color: #5c4033; margin-bottom: 16px;">随时随地的远程桌面控制</h2>
+            <p style="color: #8b7355; font-size: 16px; max-width: 600px; margin: 0 auto 32px;">通过Android手机远程控制桌面，支持BigModel/ZCode模型选择，深度思考等级调节，让移动办公更加高效。</p>
             <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="download-btn" target="_blank">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                下载 Release APK
+            </a>
+            <p class="download-meta">Release版本 · R8混淆优化 · arm64-v8a架构 · 4.17 MB</p>
+        </div>
+
+        <!-- App Preview -->
+        <div class="card">
+            <div class="card-title">界面预览</div>
+            <div class="screenshots">
+                <div class="screenshot">
+                    <img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step1_home.png" alt="设备列表 - 远程桌面连接管理">
+                    <div class="screenshot-caption">设备列表</div>
+                </div>
+                <div class="screenshot">
+                    <img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step3_add_device.png" alt="扫码添加设备 - 快速配对">
+                    <div class="screenshot-caption">扫码配对</div>
+                </div>
+                <div class="screenshot">
+                    <img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step4_settings_page.png" alt="设置页面 - AI配置和隐私">
+                    <div class="screenshot-caption">设置中心</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="card">
+            <div class="card-title">核心功能</div>
+            <div class="features">
+                <div class="feature">
+                    <div class="feature-icon">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <h3>远程桌面控制</h3>
+                    <p>基于WebSocket实时通信协议，流畅远程控制你的桌面工作区，随时随地访问重要文件和应用。</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                    </div>
+                    <h3>AI 模型设置</h3>
+                    <p>支持BigModel/ZCode模型提供商切换，提供auto/light/deep三种思考等级，灵活配置以满足不同任务需求。</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <h3>多设备管理</h3>
+                    <p>支持保存多台桌面设备，随时切换，一键扫码配对，安全握手连接，适合多场景办公需求。</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                    </div>
+                    <h3>安全可靠</h3>
+                    <p>本地加密存储凭据，安全握手配对机制，不收集任何用户数据，尊重用户隐私安全。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Details -->
+        <div class="card">
+            <div class="card-title">技术特性</div>
+            <p>ZCode Android采用Kotlin + Jetpack Compose现代技术栈开发，完整复刻官方Web通信协议，实现与桌面端的安全连接。</p>
+            <div class="details-grid">
+                <div class="detail-item">
+                    <div class="label">开发语言</div>
+                    <div class="value">Kotlin</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">UI框架</div>
+                    <div class="value">Compose</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">架构支持</div>
+                    <div class="value">arm64-v8a</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">最低SDK</div>
+                    <div class="value">API 28+</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">APK大小</div>
+                    <div class="value">4.17 MB</div>
+                </div>
+                <div class="detail-item">
+                    <div class="label">许可证</div>
+                    <div class="value">开源</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Methods -->
+        <div class="card">
+            <div class="card-title">下载方式</div>
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('web')">网页下载</button>
+                <button class="tab" onclick="showTab('github')">GitHub</button>
+                <button class="tab" onclick="showTab('cli')">命令行</button>
+            </div>
+            <div id="tab-web" class="tab-content active">
+                <p style="color: #8b7355; margin-bottom: 16px;">点击下方按钮直接下载 Release APK，推荐在Android设备上安装。</p>
+                <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="download-btn" target="_blank" style="font-size: 14px; padding: 14px 28px;">
+                    下载 APK
+                </a>
+            </div>
+            <div id="tab-github" class="tab-content">
+                <p style="color: #8b7355; margin-bottom: 16px;">访问GitHub仓库查看更多版本历史和源代码：</p>
+                <div class="code-block">https://github.com/Damianjiang/ZCode-Android</div>
+            </div>
+            <div id="tab-cli" class="tab-content">
+                <p style="color: #8b7355; margin-bottom: 16px;">使用命令行工具下载：</p>
+                <div class="code-block">wget https://github.com/Damianjiang/ZCode-Android/releases/latest/download/app-release.apk</div>
+                <div class="code-block" style="margin-top: 8px;">curl -O https://github.com/Damianjiang/ZCode-Android/releases/latest/download/app-release.apk</div>
+            </div>
+        </div>
+
+        <!-- FAQ -->
+        <div class="card">
+            <div class="card-title">常见问题</div>
+            <div class="faq-item">
+                <div class="faq-question">Q: ZCode Android是什么？</div>
+                <div class="faq-answer">A: ZCode Android是ZCode远程桌面的官方iOS客户端，支持Android手机远程控制桌面端ZCode，进行会话管理、文件传输、屏幕共享等操作。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">Q: 如何使用这个应用？</div>
+                <div class="faq-answer">A: 1) 在桌面端ZCode打开远程控制功能并生成配对链接；2) App内扫码或粘贴链接完成配对；3) 选择工作区后即可开始远程对话。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">Q: 这个应用安全吗？</div>
+                <div class="faq-answer">A: 应用使用安全握手配对机制，凭据仅存储在本地并通过AES-GCM加密，不上传任何数据到第三方服务器。远程控制URL中的凭证等同于设备密码，请勿分享给他人。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">Q: 支持哪些功能？</div>
+                <div class="faq-answer">A: 支持会话管理、流式文本输出、Markdown渲染、图片消息、工具调用可视化、文件附件上传、权限审批、子智能体对话、日志查看等完整功能。</div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question">Q: 如何反馈问题？</div>
+                <div class="faq-answer">A: 请在GitHub Issues页面提交问题，或在App内使用反馈功能描述问题并附带截图。</div>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="cta-section">
+            <h2>立即体验远程控制</h2>
+            <p>让你的手机成为强大的远程桌面控制工具</p>
+            <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="cta-btn" target="_blank">
                 <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                 下载 Release APK
             </a>
         </div>
 
-        <div class="card">
-            <div class="card-title">界面预览</div>
-            <div class="screenshots">
-                <div class="screenshot"><img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step1_home.png" alt="设备列表" loading="lazy"></div>
-                <div class="screenshot"><img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step3_add_device.png" alt="扫码添加设备" loading="lazy"></div>
-                <div class="screenshot"><img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step4_settings_page.png" alt="设置页面" loading="lazy"></div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">功能特性</div>
-            <div class="features">
-                <div class="feature"><h3>远程桌面控制</h3><p>WebSocket 实时通信，流畅远程控制体验</p></div>
-                <div class="feature"><h3>AI 设置</h3><p>模型提供商、思考等级灵活配置</p></div>
-                <div class="feature"><h3>移动端友好</h3><p>Jetpack Compose 构建，Material 3 设计</p></div>
-                <div class="feature"><h3>安全可靠</h3><p>安全握手配对，凭据本地加密存储</p></div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">下载方式</div>
-            <div class="tabs">
-                <button class="tab active" onclick="showTab('web')">网页下载</button>
-                <button class="tab" onclick="showTab('git')">Git Clone</button>
-                <button class="tab" onclick="showTab('wget')">Wget / Curl</button>
-            </div>
-            <div id="tab-web" class="tab-content active">
-                <p style="color: #8b7355;">点击上方按钮下载 Release APK，或访问 Releases 页面。</p>
-            </div>
-            <div id="tab-git" class="tab-content">
-                <p style="color: #8b7355; margin-bottom: 8px;">克隆项目源码：</p>
-                <div class="code-block">git clone https://github.com/Damianjiang/ZCode-Android.git</div>
-            </div>
-            <div id="tab-wget" class="tab-content">
-                <p style="color: #8b7355; margin-bottom: 8px;">使用命令行下载：</p>
-                <div class="code-block">wget https://github.com/Damianjiang/ZCode-Android/releases/latest/download/app-release.apk</div>
-            </div>
-        </div>
-
-        
-                <div class="req-item"><div class="label">架构支持</div><div class="value">arm64-v8a</div></div>
-                <div class="req-item"><div class="label">最小内存</div><div class="value">4GB RAM</div></div>
-                <div class="req-item"><div class="label">网络要求</div><div class="value">需要网络连接</div></div>
-            </div>
-        </div>
-
+        <!-- Footer -->
         <footer>
+            <div class="footer-links">
+                <a href="https://github.com/Damianjiang/ZCode-Android" target="_blank">GitHub</a>
+                <a href="https://github.com/Damianjiang/ZCode-Android/issues" target="_blank">反馈问题</a>
+                <a href="https://github.com/Damianjiang/ZCode-Android/releases" target="_blank">版本历史</a>
+            </div>
             <p>由 <strong>Damian2012</strong> 独立开发</p>
-            <p style="margin-top: 8px;"><a href="https://github.com/Damianjiang/ZCode-Android" target="_blank">GitHub</a> · <a href="https://github.com/Damianjiang/ZCode-Android/issues" target="_blank">反馈问题</a></p>
+            <p style="margin-top: 12px; font-size: 13px; opacity: 0.8;">ZCode Android · 远程控制客户端（协议复刻，独立实现）</p>
+            <p style="margin-top: 8px; font-size: 12px; opacity: 0.6;">© 2024 Damian2012. All rights reserved.</p>
         </footer>
     </div>
 
