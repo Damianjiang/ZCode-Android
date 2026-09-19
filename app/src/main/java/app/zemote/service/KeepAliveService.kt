@@ -45,7 +45,15 @@ class KeepAliveService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val device = intent?.getStringExtra(EXTRA_DEVICE)?.takeIf { it.isNotBlank() }
+        // START_STICKY 下，进程被系统回收后本服务会被以 **null intent** 重启。
+        // 此时 App 的 relay 连接已随进程一起消失，没有任何东西需要"保活"；
+        // 若照旧 startForeground，用户会看到一条 setOngoing(true) 的
+        // "正在保持连接"通知 —— 划不掉、内容还是假的。所以直接停掉自己。
+        if (intent == null) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        val device = intent.getStringExtra(EXTRA_DEVICE)?.takeIf { it.isNotBlank() }
             ?: getString(R.string.app_name)
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)

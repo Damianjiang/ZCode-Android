@@ -23,12 +23,13 @@ object AppSettings {
     }
 
     /** 最多展示的历史消息条数（默认 200） */
+    // 缓存 SharedPreferences 实例，避免每次读写都重新打开文件
+    private val prefs by lazy { context.getSharedPreferences(FILE, MODE_PRIVATE) }
+
     var maxMessages: Int
-        get() = context.getSharedPreferences(FILE, MODE_PRIVATE)
-            .getInt(Keys.MAX_MESSAGES, DEFAULT_MAX_MESSAGES)
+        get() = prefs.getInt(Keys.MAX_MESSAGES, DEFAULT_MAX_MESSAGES)
         set(value) {
             val vs = value.coerceIn(50, 1000)
-            context.getSharedPreferences(FILE, MODE_PRIVATE)
-                .edit().putInt(Keys.MAX_MESSAGES, vs).apply()
+            prefs.edit().putInt(Keys.MAX_MESSAGES, vs).apply()
         }
 }

@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -120,10 +121,15 @@ fun QrScanScreen(
 @Composable
 private fun QrCameraView(onResult: (String) -> Unit) {
     val ctx = LocalContext.current
+    @Suppress("DEPRECATION")
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
     val handled = remember { mutableStateOf(false) }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    // 扫码结束后销毁线程池，防止 composable 重建时泄漏
+    DisposableEffect(Unit) {
+        onDispose { executor.shutdown() }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(

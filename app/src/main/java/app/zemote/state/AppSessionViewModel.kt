@@ -61,7 +61,12 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
     private val conversationMutex = Mutex()
 
     private companion object {
-        const val MAX_CONVERSATIONS_PER_ACCOUNT = 4
+        /**
+         * 单设备最多缓存的工作区会话仓库数。
+         * 之前是 4：在任务列表里依次点开 5 个工作区，最早那个（可能正是当前可见的
+         * 聊天页）就会被淘汰 dispose 掉，页面从此收不到任何推送——表现是"会话一直加载不出来"。
+         */
+        const val MAX_CONVERSATIONS_PER_ACCOUNT = 8
     }
 
     /** MainShell bootstrap 后缓存工作区原始 map（V4 握手的 scopeParams 需要） */
@@ -153,9 +158,10 @@ class AppSessionViewModel(application: Application) : AndroidViewModel(applicati
                     return@withLock
                 }
                 val client = ZemoteClient(params, onLog = { msg ->
-                        android.util.Log.d("Zemote", msg)
-                        ZemoteLogger.info("protocol", msg)
-                    })
+                    // 只记一条：旧实现对同一行日志同时写 debug + info，
+                    // 等于每条协议日志都翻倍占用环形缓冲、并翻倍触发发布
+                    ZemoteLogger.debug("protocol", msg)
+                })
                 try {
                     client.connect()
                     client.waitPaired(timeoutMs = 90_000L)

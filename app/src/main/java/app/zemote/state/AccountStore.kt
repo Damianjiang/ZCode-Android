@@ -40,9 +40,22 @@ class AccountStore(
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
     val accounts: StateFlow<List<Account>> = _accounts.asStateFlow()
 
-    /** 从 DataStore 载入设备列表（应用启动时调用一次） */
-    suspend fun load() {
+    /** 是否已经成功读过一次 DataStore（见 [load]）。 */
+    @Volatile
+    private var loadedOnce = false
+
+    /**
+     * 从 DataStore 载入设备列表。
+     *
+     * 幂等：首次调用才真正读盘。`AccountsScreen` 位于 `AnimatedContent` 里，
+     * 每次在「设备 / 设置」两个 Tab 之间切换都会重新组合并触发 `LaunchedEffect`，
+     * 旧实现每次都重新执行「DataStore 读 + JSON 解析 + 逐个账户的 Keystore
+     * AES-GCM 解密」—— 账号多时每次切 Tab 都是上百毫秒的无用功。
+     */
+    suspend fun load(force: Boolean = false) {
+        if (loadedOnce && !force) return
         _accounts.value = readFromDataStore()
+        loadedOnce = true
     }
 
     suspend fun addAccount(url: String, label: String? = null): Account {

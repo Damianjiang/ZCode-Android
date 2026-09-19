@@ -15,7 +15,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +34,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -56,7 +56,7 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.InsertDriveFile
+import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PieChart
@@ -93,8 +93,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -121,6 +122,7 @@ import app.zemote.state.AppSettings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -219,6 +221,28 @@ fun TasksScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                // 新建对话按钮放在最顶部，方便点击
+                item {
+                    Surface(
+                        onClick = { onOpenSession(null) },
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                stringResource(R.string.start_new_chat),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
                 if (running.isNotEmpty()) {
                     item { SectionText(stringResource(R.string.running_section)) }
                     items(running, key = { it.taskId }) { entry ->
@@ -251,28 +275,6 @@ fun TasksScreen(
                         )
                     }
                 }
-                item {
-                    // 新对话入口：不依赖已有会话
-                    Surface(
-                        onClick = { onOpenSession(null) },
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                stringResource(R.string.start_new_chat),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -294,13 +296,27 @@ fun ChatScreen(
     var repo by remember { mutableStateOf<app.zemote.protocol.ConversationV4Session?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var input by remember { mutableStateOf("") }
-    var historyUnavailable by remember { mutableStateOf(false) }
     // sessionId 变化时重置上传状态和文件列表，避免跨会话残留
     var pendingFiles by remember(sessionId) { mutableStateOf(listOf<PendingFile>()) }
     var uploadStatus by remember(sessionId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
     val context = LocalContext.current
+    // 自动跟随开关：留在这一层（低频状态，发送时置位），时间线内部只读不写。
+    // 这里刻意用显式 MutableState 而不是 `by remember { mutableStateOf(...) }`：
+    // 只有拿到那个 State 实例，才能 remember 出一个**实例稳定**的 setter lambda
+    // 传给 MessageTimeline（否则每次重组都是新 lambda，参数恒不相等 → 无法跳过重组）。
+    val autoFollowState = remember { mutableStateOf(true) }
+    var autoFollow by autoFollowState
+    val onToggleAutoFollow: (Boolean) -> Unit = remember { { v: Boolean -> autoFollowState.value = v } }
+    // 发送失败提示（服务端拒绝 / 上传失败），短暂展示后自动消失
+    var sendError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(sendError) {
+        if (sendError != null) {
+            delay(5_000)
+            sendError = null
+        }
+    }
 
     // 系统文件选择器：图片和任意文件均可选，选中即加入待发列表
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -338,120 +354,48 @@ fun ChatScreen(
             opened = runCatching { session.conversationFor(accountId, workspaceKey) }
                 .getOrNull()
             if (opened != null) break
-            delay(1500)
+            delay(1000)
         }
         if (opened == null) {
             error = deviceNotConnectedRetryText
             return@LaunchedEffect
         }
         repo = opened
-        opened.openConversation(sessionId)
-
-        if (sessionId != null) {
-            delay(4000)
-            // 只用 rows 是否为空判断重建（模型选项是次要的，没有模型也可以看历史）
-            val nothingLoaded = opened.rows.value.isEmpty()
-            if (nothingLoaded) {
-                session.closeConversation(accountId, workspaceKey)
-                repo = null
-                opened = runCatching { session.conversationFor(accountId, workspaceKey) }
-                    .getOrNull()
-                if (opened != null) {
-                    repo = opened
-                    opened.openConversation(sessionId)
-                }
-            }
-        }
-
-        delay(5000)
-        historyUnavailable = repo?.rows?.value.isNullOrEmpty()
+        // 立即启动异步加载（握手+订阅+历史），不阻塞界面渲染
+        // 用 scope.launch 而非裸 launch：composable 销毁时自动取消，防止泄漏
+        scope.launch { opened.openConversation(sessionId) }
+        scope.launch { runCatching { opened.openSessionsIndex() } }
     }
 
-    // 会话标题数据源：sessions-index（幂等，重复调用自动跳过）
-    LaunchedEffect(repo) {
-        runCatching { repo?.openSessionsIndex() }
-    }
-
-    val rows by (repo?.rows?.collectAsState() ?: remember { mutableStateOf(emptyList<ConvRow>()) })
+    // 注意：这里刻意不订阅 repo.rows——行数据的订阅放在 MessageTimeline 内部，
+    // 否则每个流式 token 都会让整个聊天页（顶栏 / 输入栏 / 队列卡片）一起重组。
+    //
+    // 同理，只在这里订阅「页面骨架真正需要」的低频状态。config / usage / modelOptions /
+    // stopWorkId / followupMode / queueItems / autoDrain 全部下沉到 ComposerSection，
+    // 因为其中 `usage` 在流式输出期间会随每个 `state.updated` 补丁更新（约 16 次/秒），
+    // 订阅在这一层等于每帧都把整个聊天页（含 MessageTimeline 与所有可见消息）重组一遍
+    // ——这是「UI 卡顿、交互响应迟缓」的主要根因。
     val working by (repo?.agentWorking?.collectAsState() ?: remember { mutableStateOf(false) })
-    val loading by (repo?.loading?.collectAsState() ?: remember { mutableStateOf(false) })
-    // 有数据时立即停止显示加载动画，不论 loading 标志是否已清除
-    val hasRows by remember(rows) { derivedStateOf { rows.isNotEmpty() } }
-    val convConfig by (repo?.convConfig?.collectAsState() ?: remember { mutableStateOf(null) })
-    val usage by (repo?.usage?.collectAsState() ?: remember { mutableStateOf(null) })
+    val historyState by (repo?.historyState?.collectAsState()
+        ?: remember { mutableStateOf(app.zemote.protocol.HistoryState.LOADING) })
     val activeId by (repo?.activeSessionId?.collectAsState() ?: remember { mutableStateOf(sessionId) })
-    val modelOptions by (repo?.modelOptions?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
-    val stopWorkId by (repo?.stopWorkId?.collectAsState() ?: remember { mutableStateOf(null) })
-    val followupMode by (repo?.followupMode?.collectAsState() ?: remember { mutableStateOf(null) })
-    val queueItems by (repo?.queueItems?.collectAsState() ?: remember { mutableStateOf(emptyList<app.zemote.protocol.QueueItem>()) })
-    val autoDrain by (repo?.autoDrain?.collectAsState() ?: remember { mutableStateOf(true) })
-    val sessionEntries by (repo?.sessionEntries?.collectAsState() ?: remember { mutableStateOf(emptyList<app.zemote.protocol.SessionEntry>()) })
-    val pendingInteractions by (repo?.pendingInteractions?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
-    val backgroundWorks by (repo?.backgroundWorks?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
 
-    // 交互响应状态
-    var selectedInteraction by remember { mutableStateOf<PendingInteraction?>(null) }
-    // 任务面板开关
+    // 任务面板开关（面板内部自己订阅 pendingInteractions / backgroundWorks）
     var showTaskPanel by remember { mutableStateOf(false) }
 
-    // 附件内容加载（收到的图片消息按 ref 拉取渲染）
-    val loadAttachment: suspend (String) -> app.zemote.protocol.AttachmentData? = { ref ->
-        val sid = activeId
-        if (sid == null) null
-        else runCatching { repo?.attachmentRead(sid, ref) }.getOrNull()
-    }
-
-    // 自动跟随开关：开启时新消息与流式增长都贴底，关闭后完全手动
-    var autoFollow by remember { mutableStateOf(true) }
-    // 是否显示「回到最新消息」按钮：autoFollow 关闭且用户上翻时出现
-    var showScrollToBottom by remember { mutableStateOf(false) }
-
-    // 工具调用行聚合：连续的 toolCall/subagent 合并为一张「执行过程」卡片，
-    // 只显示执行了什么/修改了什么，不直接刷原始 toolcall
-    // 只展示最近 [AppSettings.maxMessages] 条，防止超长会话渲染卡顿
-    val maxMsg = remember { AppSettings.maxMessages }
-    val slicedRows = remember(rows.size, maxMsg) {
-        if (rows.size <= maxMsg) rows else rows.takeLast(maxMsg)
-    }
-    val displayItems = remember(repo?.rowsVersion?.value ?: 0, slicedRows) { buildDisplayItems(slicedRows) }
-
-    // 监听滚动位置，判断是否显示「回到最新消息」按钮
-    val isFirstItemVisible by remember(listState) {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            info.totalItemsCount > 0 && info.visibleItemsInfo.firstOrNull()?.index == 0
-        }
-    }
-    val isLastItemVisible by remember(listState) {
-        derivedStateOf {
-            val info = listState.layoutInfo
-            info.totalItemsCount > 0 && info.visibleItemsInfo.lastOrNull()?.index == info.totalItemsCount - 1
-        }
-    }
-    // 当最后一项不可见时（用户上翻了），显示回到最新消息按钮
-    LaunchedEffect(isLastItemVisible, displayItems.isNotEmpty()) {
-        showScrollToBottom = !isLastItemVisible && displayItems.isNotEmpty()
-    }
-
-    // 新消息到达（条目数变化）：滚动定位到最新一条
-    LaunchedEffect(displayItems.size, historyUnavailable) {
-        if (autoFollow && displayItems.isNotEmpty()) {
-            historyUnavailable = false
-            listState.animateScrollToItem((displayItems.size - 1).coerceAtLeast(0))
-        }
-    }
-
-    // 流式输出跟随：思考/回复内容增长时条目数不变，按最后一行内容长度触发贴底滚动；
-    // 用户上翻阅读历史时（最后一项不可见）暂停跟随，不抢滚动位置
-    val lastRowLen = slicedRows.lastOrNull()?.let {
-        it.text.length + it.outputText.length + it.inputText.length + it.summaryText.length
-    } ?: 0
-    LaunchedEffect(lastRowLen, working) {
-        if (!autoFollow || slicedRows.isEmpty()) return@LaunchedEffect
-        val info = listState.layoutInfo
-        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-        if (info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 1) {
-            listState.animateScrollBy(4000f)
+    // 附件内容加载（收到的图片消息按 ref 拉取渲染）。
+    // 这个 lambda 会一路传到每个可见的时间线条目，**必须实例稳定**：
+    // 用 rememberUpdatedState 持有最新的 repo / activeId，再 remember 出唯一的 lambda 实例。
+    // 旧实现每次重组都新建 lambda，MessageTimeline 参数恒不相等 → 永远无法跳过重组，
+    // 所有可见消息都会跟着重组（Markdown 文本重新布局），卡顿被进一步放大。
+    val repoState = rememberUpdatedState(repo)
+    val activeIdState = rememberUpdatedState(activeId)
+    val loadAttachment: suspend (String) -> app.zemote.protocol.AttachmentData? = remember {
+        { ref ->
+            val r = repoState.value
+            val sid = activeIdState.value
+            if (r == null || sid == null) null
+            else runCatching { r.attachmentRead(sid, ref) }.getOrNull()
         }
     }
 
@@ -462,44 +406,28 @@ fun ChatScreen(
             .statusBarsPadding()
             .imePadding(),
     ) {
-        // 会话标题：sessions-index 实时数据（桌面端重命名会跟着更新）；拿不到时回退通用标题
-        val sessionTitle = sessionEntries
-            .firstOrNull { it.sessionId == activeId }
-            ?.title?.trim()?.ifBlank { null }
-        val hasPending = pendingInteractions.isNotEmpty()
-        val hasBackground = backgroundWorks.any { it.status == "running" }
+        // 顶栏三块各自独立订阅，互不牵连：
+        //   标题   → sessionEntries（sessions-index 推送）
+        //   右侧按钮 → pendingInteractions / backgroundWorks
+        // 它们原先都订阅在 ChatScreen 顶层，任何一次会话列表刷新、后台任务状态变化
+        // 都会把整页（含时间线与所有可见消息）拖进重组。
         ScreenHeader(
-            title = when {
-                activeId == null -> stringResource(R.string.new_chat)
-                sessionTitle != null -> sessionTitle
-                else -> stringResource(R.string.sessions_title)
+            titleContent = {
+                ChatHeaderTitle(
+                    repo = repo,
+                    activeId = activeId,
+                    newChatTitle = stringResource(R.string.new_chat),
+                    fallbackTitle = stringResource(R.string.sessions_title),
+                )
             },
             subtitle = activeId?.take(12),
             onBack = onBack,
             actions = {
-                // 任务面板按钮：显示运行中任务和后台进程
-                FilledTonalIconButton(
-                    onClick = { showTaskPanel = !showTaskPanel },
-                    modifier = Modifier.size(36.dp),
+                ChatHeaderActions(
+                    repo = repo,
                     enabled = repo != null && error == null,
-                ) {
-                    val tint = if (hasPending || hasBackground) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    Icon(
-                        Icons.Rounded.TaskAlt,
-                        contentDescription = stringResource(R.string.tasks_panel),
-                        tint = tint,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    if (hasPending) {
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(MaterialTheme.colorScheme.error, CircleShape),
-                        )
-                    }
-                }
+                    onToggle = { showTaskPanel = !showTaskPanel },
+                )
             },
         )
 
@@ -532,172 +460,56 @@ fun ChatScreen(
                 }
             }
         } else {
-            Box(
+            MessageTimeline(
+                repo = repo!!,
+                workspaceKey = workspaceKey,
+                sessionId = sessionId,
+                activeId = activeId,
+                listState = listState,
+                autoFollow = autoFollow,
+                onToggleAutoFollow = onToggleAutoFollow,
+                working = working,
+                historyState = historyState,
+                loadAttachment = loadAttachment,
+                onOpenSubagent = onOpenSubagent,
+                scope = scope,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-            ) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    if (loading && !hasRows) {
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 90.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                CircularProgressIndicator(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(32.dp),
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Text(
-                                    stringResource(R.string.loading_chat),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    } else if (historyUnavailable) {
-                        item {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                shape = RoundedCornerShape(16.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(
-                                    stringResource(R.string.session_empty),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(14.dp),
-                                )
-                            }
-                        }
-                    }
-                    items(displayItems, key = { it.key }) { item ->
-                        when (item) {
-                            is DisplayItem.Single -> {
-                                if (item.row.kind == ConvKinds.USER_INPUT) {
-                                    TimelineRow(item.row, loadAttachment, onOpenSubagent = { row ->
-                                        row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") }
-                                    })
-                                } else {
-                                    // AI 产生的内容淡入，更灵动
-                                    FadeInContainer(item.key) {
-                                        TimelineRow(item.row, loadAttachment, onOpenSubagent = { row ->
-                                            row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") }
-                                        })
-                                    }
-                                }
-                            }
-                            is DisplayItem.ToolGroup -> FadeInContainer(item.key) {
-                                ToolGroupCard(item.rows, onOpenSubagent = { row ->
-                                    row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") }
-                                })
-                            }
-                        }
-                    }
-                    if (working) {
-                        item {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                ThinkingDot()
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    stringResource(R.string.processing),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
+            )
 
-                // 右下角浮动按钮组
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    // 回到最新消息：自动跟随关闭且用户上翻时出现
-                    AnimatedVisibility(visible = showScrollToBottom) {
-                        FilledTonalIconButton(
-                            onClick = {
-                                showScrollToBottom = false
-                                scope.launch {
-                                    val target = (displayItems.size - 1).coerceAtLeast(0)
-                                    if (target >= 0) {
-                                        listState.animateScrollToItem(target)
-                                    }
-                                }
-                            },
-                            modifier = Modifier.size(34.dp),
-                        ) {
-                            Icon(
-                                Icons.Rounded.KeyboardArrowDown,
-                                contentDescription = stringResource(R.string.scroll_to_bottom),
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-                    // 自动跟随开关：亮 = 跟随最新内容，暗 = 手动浏览
-                    IconToggleButton(
-                        checked = autoFollow,
-                        onCheckedChange = { autoFollow = it },
-                        modifier = Modifier.size(34.dp),
+            if (!readOnly) {
+                // 发送失败提示：服务端拒绝时输入框已恢复，这里给出原因
+                sendError?.let { msg ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
-                        Icon(
-                            Icons.Rounded.ArrowDownward,
-                            contentDescription = if (autoFollow) stringResource(R.string.auto_follow_on) else stringResource(R.string.auto_follow_off),
-                            modifier = Modifier.size(18.dp),
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         )
                     }
                 }
-            }
-
-            if (!readOnly) {
-                // 排队消息卡片：AI 工作中发送的内容进入队列，可立即发送/编辑/删除（官方队列语义）
-                QueueBar(
-                    items = queueItems,
-                    autoDrain = autoDrain,
-                    onSendNow = { id -> scope.launch { runCatching { repo?.sendQueuedNow(id) } } },
-                    onEdit = { id, text -> scope.launch { runCatching { repo?.editQueueItem(id, text) } } },
-                    onDelete = { id -> scope.launch { runCatching { repo?.deleteQueueItem(id) } } },
-                    onToggleAutoDrain = { on -> scope.launch { runCatching { repo?.setAutoDrain(on) } } },
-                    onReorder = { ids -> scope.launch { runCatching { repo?.reorderQueueItem(ids) } } },
-                )
-
-                if (pendingFiles.isNotEmpty() || uploadStatus != null) {
-                    PendingFilesBar(
-                        files = pendingFiles,
-                        status = uploadStatus,
-                        onRemove = { f -> pendingFiles = pendingFiles - f },
-                    )
-                }
-
-                ComposerBar(
-                    text = input,
-                    onTextChange = { input = it },
+                // 发送区整体下沉到 ComposerSection：它内部才订阅 config / usage /
+                // modelOptions / queueItems 等高频状态。这些 flow 原本订阅在 ChatScreen
+                // 顶层（见上方注释），流式期间会把整页拖进高频重组。
+                ComposerSection(
+                    repo = repo,
+                    input = input,
+                    onInputChange = { input = it },
                     working = working,
                     enabled = repo != null && error == null,
-                    config = convConfig,
-                    usage = usage,
-                    modelOptions = modelOptions,
-                    stopWorkId = stopWorkId,
-                    followupMode = followupMode,
+                    activeId = activeId,
+                    pendingFiles = pendingFiles,
+                    uploadStatus = uploadStatus,
+                    onRemoveFile = { f -> pendingFiles = pendingFiles - f },
                     onAttach = { pickFiles.launch(arrayOf("*/*")) },
-                    onThoughtSelect = { level ->
-                        scope.launch { runCatching { repo?.setThought(level) } }
-                    },
-                    onModelSelect = { provider, model ->
-                        scope.launch { runCatching { repo?.setModel(provider, model) } }
-                    },
                     onSend = { queued ->
                         val text = input
                         val files = pendingFiles
@@ -707,6 +519,9 @@ fun ChatScreen(
                             runCatching {
                                 val repo0 = repo ?: return@launch
                                 var target = activeId
+                                // 官方语义：只有 accepted/duplicate/noop 才算发出去；
+                                // 其余状态要恢复输入框并提示，否则消息会"凭空消失"
+                                var outcome: app.zemote.protocol.SendOutcome? = null
                                 if (files.isNotEmpty()) {
                                     // 官方路径：附件需先有 sessionId 才能上传 →
                                     // createSession → attachmentPut → sendText(attachments)
@@ -730,20 +545,32 @@ fun ChatScreen(
                                     }
                                     uploadStatus = null
                                     pendingFiles = emptyList()
-                                    repo0.sendText(text, target, attachments = descriptors)
+                                    outcome = repo0.sendText(text, target, attachments = descriptors)
                                 } else {
                                     // AI 回复中 → 官方 queue 语义（排队）；空闲 → startNow。
                                     // 后续更新完全由订阅帧（row.appended / row.delta）推送，不做轮询
-                                    repo0.sendText(
+                                    // 发送时若 target 为 null，sendText 会先 createSession 再发送
+                                    outcome = repo0.sendText(
                                         text,
                                         target,
                                         requestedDelivery = if (queued) "queue" else "startNow",
                                     )
                                 }
+                                (outcome as? app.zemote.protocol.SendOutcome.Accepted)?.sessionId?.let { target = it }
+                                if (outcome is app.zemote.protocol.SendOutcome.Rejected) {
+                                    throw IllegalStateException(
+                                        context.getString(
+                                            R.string.send_rejected,
+                                            outcome.reasonCode ?: outcome.message ?: "",
+                                        ),
+                                    )
+                                }
                             }.onFailure {
+                                // 失败即恢复输入内容与待发附件，并提示原因
                                 input = text
                                 pendingFiles = files
                                 uploadStatus = null
+                                sendError = it.message ?: context.getString(R.string.send_rejected, "")
                             }
                         }
                     },
@@ -754,41 +581,572 @@ fun ChatScreen(
             }
         }
 
-        // 权限审批 / 用户输入弹窗
-        selectedInteraction?.let { inter ->
-            InteractionDialog(
-                interaction = inter,
-                onRespond = { optionId, freeText, action ->
-                    val req = selectedInteraction
-                    selectedInteraction = null
-                    scope.launch {
-                        if (req != null) repo?.respondInteraction(req.requestId, optionId, freeText, action)
-                    }
-                },
-                onDismiss = { selectedInteraction = null },
-            )
-        }
+        // 权限审批 / 用户输入弹窗：出现新的待响应请求时自动弹出
+        InteractionDialogHost(repo)
 
-        // 任务面板（全屏覆盖）
-        if (showTaskPanel) {
-            TaskPanel(
-                interactions = pendingInteractions,
-                works = backgroundWorks,
-                onRespond = { inter, optId, freeText, action ->
-                    scope.launch {
-                        repo?.respondInteraction(inter.requestId, optId, freeText, action)
-                        showTaskPanel = false
-                    }
-                },
-                onCancel = { workId ->
-                    scope.launch { repo?.cancelBackgroundWork(workId) }
-                },
-                onDismiss = { showTaskPanel = false },
+        // 任务面板（全屏覆盖）：不可见时完全不订阅后台状态
+        TaskPanelHost(
+            repo = repo,
+            visible = showTaskPanel,
+            onDismiss = { showTaskPanel = false },
+        )
+    }
+}
+
+// ────────────────────────── 顶栏（独立重组域） ──────────────────────────
+
+/**
+ * 会话标题：订阅 sessions-index 的实时标题（桌面端重命名会跟着更新）。
+ * 抽成独立组件，让 sessions-index 的推送只重组这一个 `Text`，
+ * 而不是整个聊天页（顶栏 + 时间线 + 发送区）。
+ */
+@Composable
+private fun ChatHeaderTitle(
+    repo: app.zemote.protocol.ConversationV4Session?,
+    activeId: String?,
+    newChatTitle: String,
+    fallbackTitle: String,
+) {
+    val sessionEntries by (repo?.sessionEntries?.collectAsState()
+        ?: remember { mutableStateOf(emptyList<app.zemote.protocol.SessionEntry>()) })
+    val sessionTitle = sessionEntries
+        .firstOrNull { it.sessionId == activeId }
+        ?.title?.trim()?.ifBlank { null }
+    Text(
+        text = when {
+            activeId == null -> newChatTitle
+            sessionTitle != null -> sessionTitle
+            else -> fallbackTitle
+        },
+        style = MaterialTheme.typography.titleLarge,
+    )
+}
+
+/**
+ * 顶栏右侧的任务面板入口。
+ * 订阅 `pendingInteractions` / `backgroundWorks` —— Agent 工作时后台任务状态会频繁变化，
+ * 订阅留在 ChatScreen 顶层会波及整页；放在这里只会重组这一个按钮。
+ */
+@Composable
+private fun ChatHeaderActions(
+    repo: app.zemote.protocol.ConversationV4Session?,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+) {
+    val pendingInteractions by (repo?.pendingInteractions?.collectAsState()
+        ?: remember { mutableStateOf(emptyList()) })
+    val backgroundWorks by (repo?.backgroundWorks?.collectAsState()
+        ?: remember { mutableStateOf(emptyList()) })
+    val hasPending = pendingInteractions.isNotEmpty()
+    val hasBackground = backgroundWorks.any { it.status == "running" }
+
+    FilledTonalIconButton(
+        onClick = onToggle,
+        modifier = Modifier.size(36.dp),
+        enabled = enabled,
+    ) {
+        val tint = if (hasPending || hasBackground) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+        Icon(
+            Icons.Rounded.TaskAlt,
+            contentDescription = stringResource(R.string.tasks_panel),
+            tint = tint,
+            modifier = Modifier.size(18.dp),
+        )
+        if (hasPending) {
+            Spacer(modifier = Modifier.width(2.dp))
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(MaterialTheme.colorScheme.error, CircleShape),
             )
         }
     }
 }
 
+// ────────────────────────── 交互响应 / 任务面板（独立重组域） ──────────────────────────
+
+/**
+ * 权限审批 / 用户输入弹窗宿主。
+ *
+ * 修复的缺陷：旧实现用一个 `selectedInteraction` 状态驱动弹窗，但**全仓库没有任何
+ * 地方把它置为非 null** —— 这个弹窗永远不会出现。桌面端发起权限审批时，界面只是
+ * 在任务面板按钮上多一个小红点；用户不主动点开任务面板就完全看不到，而 Agent 会
+ * 一直阻塞等待答复。现在改为订阅 `pendingInteractions`，出现新的待响应请求就自动弹出，
+ * 每个 `requestId` 只自动弹一次（用户手动关掉后不会再弹回来）。
+ */
+@Composable
+private fun InteractionDialogHost(repo: app.zemote.protocol.ConversationV4Session?) {
+    val interactions by (repo?.pendingInteractions?.collectAsState()
+        ?: remember { mutableStateOf(emptyList()) })
+    val scope = rememberCoroutineScope()
+    // 已自动弹过的 requestId（纯记账，不参与组合观察）
+    val shown = remember { mutableSetOf<String>() }
+    var current by remember { mutableStateOf<PendingInteraction?>(null) }
+
+    LaunchedEffect(interactions) {
+        if (current != null) return@LaunchedEffect
+        val next = interactions.firstOrNull { it.requestId !in shown } ?: return@LaunchedEffect
+        if (shown.size > 256) shown.clear()
+        shown.add(next.requestId)
+        current = next
+    }
+
+    val inter = current ?: return
+    InteractionDialog(
+        interaction = inter,
+        onRespond = { optionId, freeText, action ->
+            current = null
+            scope.launch { repo?.respondInteraction(inter.requestId, optionId, freeText, action) }
+        },
+        onDismiss = { current = null },
+    )
+}
+
+/**
+ * 任务面板宿主。
+ * `visible` 为 false 时直接返回、**不建立任何订阅** —— 否则后台任务状态的频繁更新
+ * 会持续重组聊天页。
+ */
+@Composable
+private fun TaskPanelHost(
+    repo: app.zemote.protocol.ConversationV4Session?,
+    visible: Boolean,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) return
+    val scope = rememberCoroutineScope()
+    val interactions by (repo?.pendingInteractions?.collectAsState()
+        ?: remember { mutableStateOf(emptyList()) })
+    val works by (repo?.backgroundWorks?.collectAsState()
+        ?: remember { mutableStateOf(emptyList()) })
+
+    TaskPanel(
+        interactions = interactions,
+        works = works,
+        onRespond = { inter, optId, freeText, action ->
+            scope.launch {
+                repo?.respondInteraction(inter.requestId, optId, freeText, action)
+                onDismiss()
+            }
+        },
+        onCancel = { workId ->
+            scope.launch { repo?.cancelBackgroundWork(workId) }
+        },
+        onDismiss = onDismiss,
+    )
+}
+
+// ────────────────────────── 发送区（独立重组域） ──────────────────────────
+
+/**
+ * 发送区：队列卡片 + 待发附件条 + 输入栏。
+ *
+ * 单独抽出来的唯一目的是**限制重组范围**：`convConfig` / `usage` / `modelOptions` /
+ * `stopWorkId` / `followupMode` / `queueItems` / `autoDrain` 只在这里订阅。
+ * 这些状态在流式输出期间更新极频繁（尤其 `usage` 随每个 `state.updated` 补丁，
+ * 约 16 次/秒），订阅在 ChatScreen 顶层会让整个聊天页连同 MessageTimeline、
+ * 所有可见消息一起重组 —— 这正是「UI 卡顿、交互响应迟缓」的主要根因。
+ */
+@Composable
+private fun ComposerSection(
+    repo: app.zemote.protocol.ConversationV4Session?,
+    input: String,
+    onInputChange: (String) -> Unit,
+    working: Boolean,
+    enabled: Boolean,
+    activeId: String?,
+    pendingFiles: List<PendingFile>,
+    uploadStatus: String?,
+    onRemoveFile: (PendingFile) -> Unit,
+    onAttach: () -> Unit,
+    onSend: (queued: Boolean) -> Unit,
+    onStop: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val convConfig by (repo?.convConfig?.collectAsState() ?: remember { mutableStateOf(null) })
+    val usage by (repo?.usage?.collectAsState() ?: remember { mutableStateOf(null) })
+    val modelOptions by (repo?.modelOptions?.collectAsState() ?: remember { mutableStateOf(emptyList()) })
+    val stopWorkId by (repo?.stopWorkId?.collectAsState() ?: remember { mutableStateOf(null) })
+    val followupMode by (repo?.followupMode?.collectAsState() ?: remember { mutableStateOf(null) })
+    val queueItems by (repo?.queueItems?.collectAsState()
+        ?: remember { mutableStateOf(emptyList<app.zemote.protocol.QueueItem>()) })
+    val autoDrain by (repo?.autoDrain?.collectAsState() ?: remember { mutableStateOf(true) })
+
+    // 排队消息卡片：AI 工作中发送的内容进入队列，可立即发送/编辑/删除（官方队列语义）
+    QueueBar(
+        items = queueItems,
+        autoDrain = autoDrain,
+        onSendNow = { id -> scope.launch { runCatching { repo?.sendQueuedNow(id) } } },
+        onEdit = { id, text -> scope.launch { runCatching { repo?.editQueueItem(id, text) } } },
+        onDelete = { id -> scope.launch { runCatching { repo?.deleteQueueItem(id) } } },
+        onToggleAutoDrain = { on -> scope.launch { runCatching { repo?.setAutoDrain(on) } } },
+        onReorder = { ids -> scope.launch { runCatching { repo?.reorderQueueItem(ids) } } },
+    )
+
+    if (pendingFiles.isNotEmpty() || uploadStatus != null) {
+        PendingFilesBar(
+            files = pendingFiles,
+            status = uploadStatus,
+            onRemove = onRemoveFile,
+        )
+    }
+
+    ComposerBar(
+        text = input,
+        onTextChange = onInputChange,
+        working = working,
+        enabled = enabled,
+        config = convConfig,
+        usage = usage,
+        modelOptions = modelOptions,
+        stopWorkId = stopWorkId,
+        followupMode = followupMode,
+        onAttach = onAttach,
+        onThoughtSelect = { level ->
+            scope.launch { runCatching { repo?.setThought(level) } }
+        },
+        onModelSelect = { provider, model ->
+            scope.launch { runCatching { repo?.setModel(provider, model) } }
+        },
+        onSend = onSend,
+        onStop = onStop,
+    )
+}
+
+// ────────────────────────── 消息时间线（独立重组域） ──────────────────────────
+
+/**
+ * 消息时间线。
+ *
+ * 单独抽成一个 composable 是为了**把重组范围限制在时间线内部**：`repo.rows` 只在这里订阅，
+ * 流式输出时不会带着顶栏、输入栏、队列卡片一起重组（旧实现整页订阅 rows，
+ * 每个 token 都会让整页重组一遍，这是卡顿的主因之一）。
+ */
+@Composable
+private fun MessageTimeline(
+    repo: app.zemote.protocol.ConversationV4Session,
+    workspaceKey: String,
+    sessionId: String?,
+    activeId: String?,
+    listState: LazyListState,
+    autoFollow: Boolean,
+    onToggleAutoFollow: (Boolean) -> Unit,
+    working: Boolean,
+    historyState: app.zemote.protocol.HistoryState,
+    loadAttachment: suspend (String) -> app.zemote.protocol.AttachmentData?,
+    onOpenSubagent: (String, String, String) -> Unit,
+    scope: CoroutineScope,
+    modifier: Modifier = Modifier,
+) {
+    val rows by repo.rows.collectAsState()
+    // hasMore 是可观察的 StateFlow（见 ConversationV4Session.hasMoreFlow）。
+    // 旧实现里 `hasMore` 只是普通 var，`repo.hasOlderHistory` 在组合中读取它却
+    // 不产生订阅 —— 服务端翻页结果变化时不会触发重组，于是出现「明明还有更早
+    // 历史，顶部按钮却不出现」这种与预期不符的行为。
+    val hasMoreFlag by repo.hasMoreFlow.collectAsState()
+    val hasOlder = remember(rows, hasMoreFlag) { repo.hasOlderHistory }
+
+    // 行内容变化时重建展示项；LazyColumn 用稳定 key，未变化的条目会被自动跳过。
+    // 上一次的结果放在普通引用里而不是 Compose state —— 组合期间写 state 会引入
+    // 额外的重组轮次，这里只需要它作为「实例复用池」，不参与订阅。
+    val prevItemsRef = remember {
+        java.util.concurrent.atomic.AtomicReference<List<DisplayItem>>(emptyList())
+    }
+    val displayItems = remember(rows) {
+        buildDisplayItems(rows, prevItemsRef.get()).also { prevItemsRef.set(it) }
+    }
+
+    // 是否显示「回到最新消息」按钮：用户上翻时出现
+    var showScrollToBottom by remember { mutableStateOf(false) }
+    // 向上加载更多历史的状态
+    var isLoadingOlder by remember { mutableStateOf(false) }
+    var loadOlderError by remember { mutableStateOf<String?>(null) }
+
+    val isFirstItemVisible by remember(listState) {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 && info.visibleItemsInfo.firstOrNull()?.index == 0
+        }
+    }
+    val isLastItemVisible by remember(listState) {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 && info.visibleItemsInfo.lastOrNull()?.index == info.totalItemsCount - 1
+        }
+    }
+
+    // 当最后一项不可见时（用户上翻了），显示回到最新消息按钮
+    LaunchedEffect(isLastItemVisible, displayItems.isNotEmpty()) {
+        showScrollToBottom = !isLastItemVisible && displayItems.isNotEmpty()
+    }
+
+    // ── 列表条目结构：DSL 与锚点索引共用同一组条件，避免两处判断不一致导致滚动位置算错 ──
+    val showLoading = rows.isEmpty() && historyState == app.zemote.protocol.HistoryState.LOADING
+    val showFailed = rows.isEmpty() && historyState == app.zemote.protocol.HistoryState.FAILED
+    val showEmpty = rows.isEmpty() && historyState == app.zemote.protocol.HistoryState.EMPTY
+    // 注意：不把 isLoadingOlder 放进条件里 —— 加载中让按钮原地变转圈，
+    // 否则条目会在加载开始/结束时被移除又插入，列表整体跳动一下。
+    val showOlderButton = isFirstItemVisible && activeId != null &&
+        loadOlderError == null && (hasOlder || isLoadingOlder)
+    val showOlderError = loadOlderError != null
+
+    /**
+     * 末尾锚点项的索引，从数据推算而不是读 `layoutInfo`。
+     * 布局在组合之后才更新，用 `layoutInfo.totalItemsCount - 1` 取会滞后一帧，
+     * 新消息到达时滚动会差一条。顺序：可选状态条目 → displayItems → 可选 working → 锚点。
+     */
+    val anchorIndex = listOf(showLoading, showFailed, showEmpty, showOlderButton, showOlderError)
+        .count { it } + displayItems.size + (if (working) 1 else 0)
+
+    // 提到 items 外面：以前每个条目、每次重组都会新建一个 lambda，导致捕获它的
+    // FadeInContainer / TimelineRow 参数恒不相等，永远无法跳过重组。
+    val openSub: (ConvRow) -> Unit = remember(workspaceKey, sessionId, onOpenSubagent) {
+        { row -> row.childSessionId?.let { cid -> onOpenSubagent(workspaceKey, cid, sessionId ?: "") } }
+    }
+
+    // 到达列表顶部时自动加载更早的历史（服务端确实还有更早的行才触发）。
+    // 把 hasOlder 也作为 key：翻页结果变化时能重新触发（Boolean 相等比较，
+    // 值没变就不会重启 effect，不会造成重复加载）。
+    LaunchedEffect(isFirstItemVisible, displayItems.isNotEmpty(), hasOlder) {
+        if (!isFirstItemVisible || isLoadingOlder) return@LaunchedEffect
+        val sid = activeId ?: return@LaunchedEffect
+        if (!hasOlder) return@LaunchedEffect
+        isLoadingOlder = true
+        loadOlderError = null
+        // 直接在本 effect 里挂起，加载期间 isLoadingOlder 保持 true，
+        // 避免按钮和滚动触发在两帧内重复发起同一次翻页。
+        try {
+            repo.loadOlderMessages(sid)
+        } catch (t: Throwable) {
+            loadOlderError = t.message ?: t.javaClass.simpleName
+        } finally {
+            isLoadingOlder = false
+        }
+    }
+
+    // 新消息 / 条目数变化：贴底。
+    // 列表末尾放了一个 0 高度的锚点项，"滚到最后一个 index"就等价于"贴到底部"，
+    // 这样最后一条很长时也不会只把它的顶部露出来。
+    var lastScrollTarget by remember { mutableStateOf(-1) }
+    LaunchedEffect(anchorIndex, autoFollow) {
+        if (!autoFollow || displayItems.isEmpty()) return@LaunchedEffect
+        // 只有当前已经贴底时才继续跟随，防止用户上翻时被强制弹回
+        val info = listState.layoutInfo
+        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: return@LaunchedEffect
+        if (lastVisible < info.totalItemsCount - 1) return@LaunchedEffect
+        if (anchorIndex != lastScrollTarget) {
+            lastScrollTarget = anchorIndex
+            listState.scrollToItem(anchorIndex)
+        }
+    }
+
+    Box(modifier = modifier) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (showLoading) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 90.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp),
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            stringResource(R.string.loading_chat),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else if (showFailed) {
+                // 订阅/拉取都失败时给出明确反馈和重试入口，而不是一片空白
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 90.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            stringResource(R.string.fetch_sessions_failed),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        TextButton(onClick = { scope.launch { repo.retryHistory(activeId) } }) {
+                            Text(stringResource(R.string.retry_connect))
+                        }
+                    }
+                }
+            } else if (showEmpty) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(R.string.session_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(14.dp),
+                        )
+                    }
+                }
+            }
+
+            // 加载更多历史按钮：还有更早的行时显示在列表顶部
+            if (showOlderButton) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (isLoadingOlder) return@clickable
+                                isLoadingOlder = true
+                                loadOlderError = null
+                                scope.launch {
+                                    try {
+                                        repo.loadOlderMessages(activeId)
+                                    } catch (t: Throwable) {
+                                        loadOlderError = t.message ?: t.javaClass.simpleName
+                                    } finally {
+                                        isLoadingOlder = false
+                                    }
+                                }
+                            }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isLoadingOlder) {
+                                CircularProgressIndicator(
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Rounded.History,
+                                    contentDescription = stringResource(R.string.load_older_messages),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            stringResource(R.string.load_older_messages),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+            if (showOlderError) {
+                item {
+                    Text(
+                        loadOlderError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+            }
+
+            items(displayItems, key = { it.key }) { item ->
+                when (item) {
+                    is DisplayItem.Single -> {
+                        if (item.row.kind == ConvKinds.USER_INPUT) {
+                            TimelineRow(item.row, loadAttachment, onOpenSubagent = openSub)
+                        } else {
+                            // AI 产生的内容淡入，更灵动
+                            FadeInContainer(item.key) {
+                                TimelineRow(item.row, loadAttachment, onOpenSubagent = openSub)
+                            }
+                        }
+                    }
+                    is DisplayItem.ToolGroup -> FadeInContainer(item.key) {
+                        ToolGroupCard(item.rows, onOpenSubagent = openSub)
+                    }
+                }
+            }
+
+            if (working) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ThinkingDot()
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            stringResource(R.string.processing),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            // 末尾锚点：滚到它 = 贴到底部（见上面的自动跟随逻辑）
+            item(key = "bottom-anchor") { Spacer(modifier = Modifier.height(0.dp)) }
+        }
+
+        // 右下角浮动按钮组
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            // 回到最新消息：用户上翻时出现
+            AnimatedVisibility(visible = showScrollToBottom) {
+                FilledTonalIconButton(
+                    onClick = {
+                        showScrollToBottom = false
+                        scope.launch { listState.animateScrollToItem(anchorIndex) }
+                    },
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.KeyboardArrowDown,
+                        contentDescription = stringResource(R.string.scroll_to_bottom),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+            // 自动跟随开关：亮 = 跟随最新内容，暗 = 手动浏览
+            IconToggleButton(
+                checked = autoFollow,
+                onCheckedChange = onToggleAutoFollow,
+                modifier = Modifier.size(34.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.ArrowDownward,
+                    contentDescription = if (autoFollow) stringResource(R.string.auto_follow_on) else stringResource(R.string.auto_follow_off),
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+// ────────────────────────── 时间线渲染 ──────────────────────────
 // ────────────────────────── 时间线渲染 ──────────────────────────
 
 @Composable
@@ -888,7 +1246,7 @@ private fun AttachmentChip(fileName: String) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Rounded.InsertDriveFile,
+                Icons.AutoMirrored.Rounded.InsertDriveFile,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(15.dp),
@@ -919,7 +1277,16 @@ private fun ImageAttachmentView(
     }
     var bitmap by remember(ref) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var failed by remember(ref) { mutableStateOf(false) }
+    // 组件销毁或 ref 变化时回收旧 bitmap，防止内存泄漏
+    DisposableEffect(ref) {
+        onDispose { bitmap?.recycle(); bitmap = null }
+    }
+    DisposableEffect(Unit) {
+        // 用户离开对话页时（ref 未变）也回收，防止整屏图片 bitmap 滞留在内存
+        onDispose { bitmap?.recycle(); bitmap = null }
+    }
     LaunchedEffect(ref) {
+        val oldBmp = bitmap
         val data = runCatching { loadAttachment(ref) }.getOrNull()
         val bmp = data?.bytes?.let { bytes ->
             runCatching {
@@ -934,6 +1301,7 @@ private fun ImageAttachmentView(
                 )
             }.getOrNull()
         }
+        if (oldBmp != null && oldBmp != bmp) oldBmp.recycle()
         if (bmp != null) bitmap = bmp else failed = true
     }
     Surface(
@@ -1394,6 +1762,12 @@ private fun ToolGroupCard(rows: List<ConvRow>, onOpenSubagent: (ConvRow) -> Unit
             // 每步一句：执行了什么 / 修改了什么（不做动画，直切）
             rows.forEach { row ->
                 val stepRunning = row.toolStatus == null || row.toolStatus == "running" || row.toolStatus == "pending"
+                // toolSentence 内部要 JSONObject 解析 inputText。工具参数是流式追加的，
+                // 卡片每帧重组时若重解析，一个 8 步的组每帧就是 8 次 JSON 解析。
+                // key 里带上 rowId，位置变化也不会取到别的行的缓存。
+                val sentence = remember(row.rowId, row.toolName, row.inputText, row.summaryText) {
+                    toolSentence(ctx, row)
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1401,7 +1775,7 @@ private fun ToolGroupCard(rows: List<ConvRow>, onOpenSubagent: (ConvRow) -> Unit
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        toolSentence(ctx, row),
+                        sentence,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -1409,8 +1783,14 @@ private fun ToolGroupCard(rows: List<ConvRow>, onOpenSubagent: (ConvRow) -> Unit
                         modifier = Modifier.weight(1f),
                     )
                     if (stepRunning) {
+                        // 静态色点：组头已有一个 ThinkingDot 承担"运行中"的动画语义，
+                        // 这里再挂 N 个 rememberInfiniteTransition 会让整卡每帧重组 N 次。
                         Spacer(modifier = Modifier.width(6.dp))
-                        ThinkingDot()
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.55f), CircleShape),
+                        )
                     } else if (row.toolStatus == "error") {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(stringResource(R.string.failed), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
@@ -1477,18 +1857,41 @@ private sealed interface DisplayItem {
     }
 
     data class ToolGroup(val rows: List<ConvRow>) : DisplayItem {
-        override val key get() = "g-${rows.first().rowId}-${rows.last().rowId}"
+        /**
+         * key 只取**首行** rowId。
+         *
+         * 旧实现把末行 rowId 也编进 key（`g-1-5`）：流式期间组内每新增一个工具调用，
+         * key 就变成 `g-1-6`，LazyColumn 会认为这是一个全新条目 —— 旧条目被销毁重建，
+         * FadeInContainer 重新从透明淡入、ToolGroupCard 的 `expanded` 展开状态被重置。
+         * 表现就是 AI 工作时「执行过程」卡片反复闪烁、用户展开后自己又合上。
+         * 首行 rowId 在组增长时保持不变，key 因此稳定，条目与状态都能被正确复用。
+         */
+        override val key get() = "g-${rows.first().rowId}"
     }
 }
 
-private fun buildDisplayItems(rows: List<ConvRow>): List<DisplayItem> {
-    val out = mutableListOf<DisplayItem>()
-    val group = mutableListOf<ConvRow>()
+/**
+ * 把行列表折叠成展示项（连续的工具调用合并成一张卡片）。
+ *
+ * `prev` 是上一次的结果：流式输出期间每 60ms 就会重跑一次，而真正变化的通常只有最后一行。
+ * 这里对每个槽位做「实例比对」，命中就复用旧对象，避免每次都重建整张列表 —— 否则
+ * 一次长会话每帧要分配上千个 DisplayItem，GC 抖动会直接表现为滚动卡顿。
+ *
+ * 之所以能安全地按 `===` 比对：ConversationV4 在内容未变时始终复用同一个 ConvRow 实例
+ * （见 appendToRow / flushPendingDeltas），只有真正被改写的行才会产生新实例。
+ */
+private fun buildDisplayItems(rows: List<ConvRow>, prev: List<DisplayItem>): List<DisplayItem> {
+    val out = ArrayList<DisplayItem>(if (prev.isEmpty()) 16 else prev.size)
+    val group = ArrayList<ConvRow>()
     fun flush() {
-        if (group.isNotEmpty()) {
-            out.add(DisplayItem.ToolGroup(group.toList()))
-            group.clear()
-        }
+        if (group.isEmpty()) return
+        val idx = out.size
+        val cached = prev.getOrNull(idx) as? DisplayItem.ToolGroup
+        val reusable = cached != null &&
+            cached.rows.size == group.size &&
+            cached.rows.indices.all { i -> cached.rows[i] === group[i] }
+        out.add(if (reusable) cached!! else DisplayItem.ToolGroup(ArrayList(group)))
+        group.clear()
     }
     for (row in rows) {
         val isTool = row.kind == ConvKinds.TOOL_CALL || row.kind == ConvKinds.SUBAGENT
@@ -1496,7 +1899,11 @@ private fun buildDisplayItems(rows: List<ConvRow>): List<DisplayItem> {
             group.add(row)
         } else {
             flush()
-            out.add(DisplayItem.Single(row))
+            val cached = prev.getOrNull(out.size)
+            out.add(
+                if (cached is DisplayItem.Single && cached.row === row) cached
+                else DisplayItem.Single(row)
+            )
         }
     }
     flush()
@@ -2188,8 +2595,21 @@ private fun modelLabel(provider: String, model: String): String {
 
 // ────────────────────────── 通用小组件 ──────────────────────────
 
+/**
+ * 通用顶栏。
+ *
+ * [titleContent] 用于需要**独立订阅**标题数据的场景（例如会话标题来自 sessions-index
+ * 的实时推送）：传一个自己订阅状态的 composable，标题更新时只会重组它自己，
+ * 而不会把整个页面拖进重组。传了 [titleContent] 就忽略 [title]。
+ */
 @Composable
-fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit, actions: @Composable () -> Unit = {}) {
+fun ScreenHeader(
+    title: String = "",
+    subtitle: String? = null,
+    onBack: () -> Unit,
+    actions: @Composable () -> Unit = {},
+    titleContent: (@Composable () -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2200,7 +2620,7 @@ fun ScreenHeader(title: String, subtitle: String? = null, onBack: () -> Unit, ac
             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.back))
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
+            if (titleContent != null) titleContent() else Text(title, style = MaterialTheme.typography.titleLarge)
             if (subtitle != null) {
                 Text(
                     subtitle,

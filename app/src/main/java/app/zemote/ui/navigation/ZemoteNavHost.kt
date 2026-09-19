@@ -13,11 +13,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import android.net.Uri
 import app.zemote.state.AccountStore
 import app.zemote.state.AppSessionViewModel
 import app.zemote.ui.screens.AccountsScreen
 import app.zemote.ui.screens.ChatScreen
 import app.zemote.ui.screens.ChangelogScreen
+import app.zemote.ui.screens.CacheCleanScreen
 import app.zemote.ui.screens.LogScreen
 import app.zemote.ui.screens.MainScreen
 import app.zemote.ui.screens.MainShellScreen
@@ -40,26 +42,49 @@ private fun enterThrough(): EnterTransition = fadeIn(tween(DurIn, delayMillis = 
 
 private fun exitThrough(): ExitTransition = fadeOut(tween(DurOut, easing = Accelerate))
 
+/**
+ * 导航路由。
+ *
+ * ⚠️ `workspaceKey` 常常是**文件系统路径**（`MainShellScreen` 取
+ * `workspaceIdentity ?: workspacePath`，任务列表又优先用 `workspacePath`），
+ * 所以它可能包含 `/`、`\`、空格、`#`、`?` 等字符。
+ *
+ * 旧实现把路径**原样拼进路由字符串**（`"tasks/$workspaceKey"`）。Navigation 是按
+ * `/` 切分路径段来匹配 `{占位符}` 的：`/home/me/proj` 会被切成 3 段，而模板
+ * `tasks/{workspaceKey}` 只接受 1 段 —— 匹配失败，`navigate()` 直接抛
+ * `IllegalArgumentException: Navigation destination that matches request ... cannot be found`。
+ * 也就是说**只要桌面端报的是 POSIX 风格路径，点进任务页就会崩**。
+ *
+ * 修复：构建路由时对每个参数 `Uri.encode`（`/` → `%2F`，保证只占一段），
+ * 读取时 `Uri.decode` 还原。Navigation 内部对 path 参数也会解码一次，
+ * 但对普通路径来说重复解码是幂等的（不含 `%` 的串解码后不变）。
+ */
 sealed class Screen(val route: String) {
     object Main : Screen("main")
     object Personalize : Screen("personalize")
     object Changelog : Screen("changelog")
     object Log : Screen("log")
+    object CacheClean : Screen("cache_clean")
     object QrScan : Screen("qr_scan")
     object MainShell : Screen("main_shell/{accountId}") {
-        fun createRoute(accountId: String) = "main_shell/$accountId"
+        fun createRoute(accountId: String) = "main_shell/${Uri.encode(accountId)}"
     }
     object Tasks : Screen("tasks/{workspaceKey}") {
-        fun createRoute(workspaceKey: String) = "tasks/$workspaceKey"
+        fun createRoute(workspaceKey: String) = "tasks/${Uri.encode(workspaceKey)}"
     }
     object Chat : Screen("chat/{workspaceKey}/{sessionId}") {
-        fun createRoute(workspaceKey: String, sessionId: String) = "chat/$workspaceKey/$sessionId"
+        fun createRoute(workspaceKey: String, sessionId: String) =
+            "chat/${Uri.encode(workspaceKey)}/${Uri.encode(sessionId)}"
     }
     object Subagent : Screen("subagent/{workspaceKey}/{childSessionId}/{parentSessionId}") {
         fun createRoute(workspaceKey: String, childSessionId: String, parentSessionId: String) =
-            "subagent/$workspaceKey/$childSessionId/$parentSessionId"
+            "subagent/${Uri.encode(workspaceKey)}/${Uri.encode(childSessionId)}/${Uri.encode(parentSessionId)}"
     }
 }
+
+/** 读取导航 path 参数并还原（与 [Screen.createRoute] 的 `Uri.encode` 配对）。 */
+private fun android.os.Bundle?.arg(key: String): String? =
+    this?.getString(key)?.let { Uri.decode(it) }
 
 @Composable
 fun ZemoteNavHost(
@@ -87,6 +112,7 @@ fun ZemoteNavHost(
                 onOpenPersonalize = { navController.navigate(Screen.Personalize.route) },
                 onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
                 onOpenLogs = { navController.navigate(Screen.Log.route) },
+                onOpenCacheClean = { navController.navigate(Screen.CacheClean.route) },
                 onScan = { navController.navigate(Screen.QrScan.route) },
             )
         }
@@ -108,8 +134,11 @@ fun ZemoteNavHost(
         composable(Screen.Log.route) {
             LogScreen(onBack = { navController.popBackStack() })
         }
+        composable(Screen.CacheClean.route) {
+            CacheCleanScreen(onBack = { navController.popBackStack() })
+        }
         composable(Screen.MainShell.route) { backStackEntry ->
-            val accountId = backStackEntry.arguments?.getString("accountId") ?: return@composable
+            val accountId = backStackEntry.arguments.arg("accountId") ?: return@composable
             val account = sessionViewModel.currentAccount(accountId)
                 ?: accountStore.accounts.value.firstOrNull { it.id == accountId }
                 ?: return@composable
@@ -127,7 +156,7 @@ fun ZemoteNavHost(
             )
         }
         composable(Screen.Tasks.route) { backStackEntry ->
-            val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
+            val workspaceKey = backStackEntry.arguments.arg("workspaceKey") ?: return@composable
             TasksScreen(
                 workspaceKey = workspaceKey,
                 session = sessionViewModel,
@@ -140,8 +169,8 @@ fun ZemoteNavHost(
             )
         }
         composable(Screen.Chat.route) { backStackEntry ->
-            val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
-            val sessionId = backStackEntry.arguments?.getString("sessionId")?.takeIf { it != "new" }
+            val workspaceKey = backStackEntry.arguments.arg("workspaceKey") ?: return@composable
+            val sessionId = backStackEntry.arguments.arg("sessionId")?.takeIf { it != "new" }
             ChatScreen(
                 workspaceKey = workspaceKey,
                 sessionId = sessionId,
@@ -153,9 +182,9 @@ fun ZemoteNavHost(
             )
         }
         composable(Screen.Subagent.route) { backStackEntry ->
-            val workspaceKey = backStackEntry.arguments?.getString("workspaceKey") ?: return@composable
-            val childSessionId = backStackEntry.arguments?.getString("childSessionId") ?: return@composable
-            val parentSessionId = backStackEntry.arguments?.getString("parentSessionId")
+            val workspaceKey = backStackEntry.arguments.arg("workspaceKey") ?: return@composable
+            val childSessionId = backStackEntry.arguments.arg("childSessionId") ?: return@composable
+            val parentSessionId = backStackEntry.arguments.arg("parentSessionId")
             val scope = rememberCoroutineScope()
             ChatScreen(
                 workspaceKey = workspaceKey,

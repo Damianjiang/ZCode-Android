@@ -1,6 +1,12 @@
 package app.zemote.ui.screens
 
 import app.zemote.R
+import app.zemote.ui.logger.ZemoteLogger
+
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -82,6 +88,20 @@ fun MainShellScreen(
 
     // 进入页面自动连接（重复调用安全：内部有互斥与复用）
     LaunchedEffect(account.id) { session.connect(account) }
+
+    // 连接成功后会启动 KeepAliveService 前台服务（常驻通知，防进程被系统回收）。
+    // Android 13+ 通知是运行时权限：清单里声明了 POST_NOTIFICATIONS，
+    // 但**全仓没有任何地方申请过它** —— 结果是保活通知被系统静默丢弃，
+    // 用户既看不到"正在保持连接"的提示，也无法点通知回到 App。
+    // 这里放在真正要建立连接的页面申请，语义最贴切（而不是一启动就弹窗打断用户）。
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* 拒绝不影响连接，只是保活通知不可见 */ }
+    LaunchedEffect(account.id) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     val status = uiState.statuses[account.id] ?: return
 
@@ -260,7 +280,7 @@ private fun WorkspaceList(
         error = null
         try {
             val result = client.bootstrap()
-            android.util.Log.d("Zemote", "[bootstrap] $result")
+            ZemoteLogger.info("bootstrap", result.toString())
             @Suppress("UNCHECKED_CAST")
             workspaces = (result["workspaces"] as? List<Map<String, Any>>) ?: emptyList()
             // 缓存每个工作区的原始 map（V4 会话握手的 scopeParams 需要）
@@ -373,7 +393,7 @@ private fun WorkspaceCard(
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 val title = (workspace["label"] as? String)
-                    ?: (workspace["workspacePath"] as? String)?.split("[\\\\/]".toRegex())?.lastOrNull { it.isNotEmpty() }
+                    ?: (workspace["workspacePath"] as? String)?.let(::lastPathSegment)
                     ?: workspace["workspaceIdentity"] as? String ?: stringResource(R.string.unknown_workspace)
                 Text(
                     title,
@@ -400,3 +420,14 @@ private fun WorkspaceCard(
         }
     }
 }
+
+/**
+ * 取路径最后一段（Windows `\` 与 POSIX `/` 都算分隔符）。
+ *
+ * 旧实现把 `split("[\\\\/]".toRegex())` 直接写在 `WorkspaceCard` 的组合体里：
+ * Kotlin 的 `String.toRegex()` **没有缓存**，所以每一次重组都会重新编译一次正则
+ * （工作区数量 × 重组次数）。这里改成纯字符切分，连正则都不需要。
+ */
+private fun lastPathSegment(path: String): String? =
+    path.split('/', '\\').lastOrNull { it.isNotEmpty() }
+

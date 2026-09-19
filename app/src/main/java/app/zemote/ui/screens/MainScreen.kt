@@ -56,6 +56,7 @@ fun MainScreen(
     onOpenPersonalize: () -> Unit,
     onOpenChangelog: () -> Unit,
     onOpenLogs: () -> Unit = {},
+    onOpenCacheClean: () -> Unit = {},
     onScan: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -98,6 +99,7 @@ fun MainScreen(
                         onOpenPersonalize = onOpenPersonalize,
                         onOpenChangelog = onOpenChangelog,
                         onOpenLogs = onOpenLogs,
+                        onOpenCacheClean = onOpenCacheClean,
                     )
                 }
             }

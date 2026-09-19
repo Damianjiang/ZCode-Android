@@ -13,11 +13,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+
 
 /** bootstrap 返回的任务条目（任务会话页主数据源） */
 data class TaskEntry(
@@ -118,8 +121,6 @@ data class ConvRow(
     val childSessionId: String? = null,
     /** 子智能体独有：子智能体类型（如 "agent" / "task" / "read" 等） */
     val subagentType: String? = null,
-    /** 版本号：rows 列表整体替换时递增，供 UI 层用 remember(rows.version) 优化 */
-    val version: Int = 0,
 )
 
 object ConvKinds {
@@ -134,6 +135,9 @@ object ConvKinds {
 
 /** 行的完成状态集合（用于思考块自动展开/折叠） */
 val COMPLETE_STATES = setOf("complete", "completedSuccess", "completedInterrupted", "error", "cancelled", "aborted")
+
+/** 历史窗口加载状态（驱动聊天页的空态 / 失败重试） */
+enum class HistoryState { LOADING, READY, EMPTY, FAILED }
 
 /** 会话运行配置（模型 / 思考等级 / 模式），来自状态帧 config */
 data class ConvConfig(
@@ -176,6 +180,20 @@ data class AttachmentUpload(
 class AttachmentData(val bytes: ByteArray, val mediaType: String?)
 
 /**
+ * 发送结果。
+ *
+ * 官方客户端在 `sendText` 之后会校验 `status`：只有 `accepted` / `duplicate` / `noop`
+ * 才算成功，其余（`blocked` / `reject*`）一律当失败处理。本 App 之前完全忽略返回值，
+ * 结果是消息被服务端拒绝时输入框已经清空、界面毫无反馈，用户以为"发出去了"。
+ */
+sealed interface SendOutcome {
+    /** 桌面端已接受（accepted / duplicate / noop） */
+    data class Accepted(val sessionId: String?) : SendOutcome
+    /** 被拒绝：reasonCode 来自协议，可用于提示用户 */
+    data class Rejected(val reasonCode: String?, val message: String? = null) : SendOutcome
+}
+
+/**
  * Conversation V4 仓库：封装从官方 Web 客户端逆向出的 zcode-agent 通道 RPC。
  * 帧协议与原版 Flutter 实现对齐（lib/protocol/conversation.dart）：
  *
@@ -198,6 +216,21 @@ class ConversationV4Session private constructor(
     companion object {
         /** 桌面对话协议能力版本。发本 App 版本号（0.x/1.x）会导致 V4 能力协商失败。 */
         const val PROTOCOL_APP_VERSION = "3.6.5"
+
+        /** 流式 delta 批量提交间隔：把 token 级更新合并到 ~16fps，避免每个 token 重建整张列表 */
+        private const val DELTA_FLUSH_INTERVAL_MS = 60L
+
+        /** 订阅会话超时：桌面端可能要预热会话运行时，官方给 60s；过短会拿不到 ack → 历史永远进不来 */
+        private const val SUBSCRIBE_TIMEOUT_MS = 45_000L
+
+        /**
+         * 队列被占用时服务端返回的 reasonCode。官方要求客户端明确二选一：
+         * `clearQueueAndSend`（丢弃已排队消息）或 `keepQueueAndSend`（保留）。
+         */
+        private const val HELD_QUEUE_STALE = "guard.heldQueueConfirmationStale"
+
+        /** 视为发送成功的 ack 状态（对齐官方 LOe） */
+        private val SEND_OK_STATUSES = setOf("accepted", "duplicate", "noop")
 
         private val CLIENT_ID = UUID.randomUUID().toString()
 
@@ -226,15 +259,28 @@ class ConversationV4Session private constructor(
 
     // ── 状态（UI 绑定） ──
     private val _rows = MutableStateFlow<List<ConvRow>>(emptyList())
-    private val _rowsVersion = MutableStateFlow(0)
     val rows: StateFlow<List<ConvRow>> = _rows.asStateFlow()
-    /** 行列表整体替换版本号；每次 setRows 调用后 +1，供 remember(version, rows) 优化聚合计算 */
-    val rowsVersion: StateFlow<Int> = _rowsVersion
 
-    /** 替换 rows 列表时递增版本号，供 UI 层用 remember(rowsVersion.value, rows) 优化聚合计算 */
+    /** rows 的读改写互斥：流式 flush 与 loadRows 分页可能并发写，加锁避免丢更新 */
+    private val rowsLock = Any()
+
+    /**
+     * rows 的唯一发布入口。
+     *
+     * 两条不变量，UI 侧的性能依赖它们，改动前请先确认没有破坏：
+     * 1. 内容未变的行必须复用同一个 ConvRow 实例（不要无条件 copy），
+     *    ChatAndTasksScreen 的 buildDisplayItems 靠 `===` 判断条目能否复用；
+     * 2. 这里不再对每一行做 `row.copy(version = ...)`——旧实现每个 token 都要
+     *    拷贝整张列表的所有行（O(n) 分配），是流式卡顿的主要来源。
+     */
+    private fun publishRows(newRows: List<ConvRow>) {
+        synchronized(rowsLock) { _rows.value = newRows }
+    }
+
+    /** 结构性替换入口：先落盘缓冲中的流式文本，保证追加顺序不被打乱 */
     private fun setRows(newRows: List<ConvRow>) {
-        _rowsVersion.value++
-        _rows.value = newRows.map { row -> row.copy(version = _rowsVersion.value) }
+        flushPendingDeltas()
+        publishRows(newRows)
     }
 
     private val _activeSessionId = MutableStateFlow<String?>(null)
@@ -242,9 +288,6 @@ class ConversationV4Session private constructor(
 
     private val _agentWorking = MutableStateFlow(false)
     val agentWorking: StateFlow<Boolean> = _agentWorking.asStateFlow()
-
-    private val _loading = MutableStateFlow(false)
-    val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     private val _convConfig = MutableStateFlow<ConvConfig?>(null)
     val convConfig: StateFlow<ConvConfig?> = _convConfig.asStateFlow()
@@ -281,8 +324,17 @@ class ConversationV4Session private constructor(
     private val _backgroundWorks = MutableStateFlow<List<BackgroundWork>>(emptyList())
     val backgroundWorks: StateFlow<List<BackgroundWork>> = _backgroundWorks.asStateFlow()
 
+    /**
+     * 历史加载状态。UI 用它区分「正在加载 / 已就绪 / 确实为空 / 加载失败」，
+     * 避免订阅失败时页面一片空白、用户以为"卡死"。
+     */
+    private val _historyState = MutableStateFlow(HistoryState.LOADING)
+    val historyState: StateFlow<HistoryState> = _historyState.asStateFlow()
+
     // ── 内部协议状态 ──
-    private var handshakeDone = false
+    /** 握手版本号：每次 rebuildSubscriptions 递增，ensureHandshake 会跳过过期请求 */
+    @Volatile private var handshakeGen = 0
+    @Volatile private var handshakeDone = false
     private var connectionId: String? = null
     private var revision = 0L
     private val ackedRevisions = ConcurrentHashMap<String, Long>()
@@ -297,6 +349,17 @@ class ConversationV4Session private constructor(
     private var resyncing = false
     private val stagedFrames = mutableListOf<Map<*, *>>()
 
+    // ── 流式 delta 合并缓冲 ──
+    /** rowId → (字段路径 → 累积文本)。把高频 token 合并成 ~16 次/秒的批量提交。 */
+    private class DeltaBuffer {
+        val parts = LinkedHashMap<String, StringBuilder>()
+        fun append(path: String, text: String) {
+            parts.getOrPut(path) { StringBuilder() }.append(text)
+        }
+    }
+    private val pendingDeltas = HashMap<Long, DeltaBuffer>()
+    private var deltaFlushJob: Job? = null
+
     // sessions-index 订阅
     private var siSubId: String? = null
     private var siCancel: (() -> Unit)? = null
@@ -309,62 +372,76 @@ class ConversationV4Session private constructor(
     private var prepThoughtLevels: List<String> = emptyList()
 
     // 历史窗口游标（对齐 Flutter ConversationState）
-    private var firstRowId: Long? = null
-    private var totalCount = 0L
+    var firstRowId: Long? = null
+        internal set
+    var totalCount: Long = 0L
+        internal set
+    /**
+     * 服务端返回的 hasMore 标志：true 表示还有更早的历史未加载。
+     *
+     * 旧实现是普通 `var`，UI 里 `repo.hasOlderHistory` 直接读它 —— 服务端翻页结果
+     * 变化时不会触发任何重组，于是「加载更早消息」按钮的显示/隐藏与真实状态脱节
+     * （明明还有更早历史，按钮却不出现）。这里额外暴露 [hasMoreFlow] 供 UI 观察。
+     */
+    private var hasMoreRaw: Boolean = false
+    private val _hasMore = MutableStateFlow(false)
+    val hasMoreFlow: StateFlow<Boolean> = _hasMore.asStateFlow()
+    var hasMore: Boolean
+        get() = hasMoreRaw
+        internal set(value) {
+            if (hasMoreRaw == value) return
+            hasMoreRaw = value
+            _hasMore.value = value
+        }
 
     // openConversation 进行中标志：恢复重建必须避让，否则会拆掉刚建立的订阅，
     // 导致历史/模型等数据永远拉不到
     @Volatile private var opening = false
-    private var rebuildPending = false
     private var rebuilding = false
 
     init {
-        // 桥接恢复后：如果会话已有但历史为空（如 bridge 未就绪时打开的会话），
-        // 自动重试加载历史，避免卡在"正在加载对话..."
+        // bridge 恢复后异步重建，不阻塞任何 openConversation 调用
         sessionScope.launch {
             bridge.recovered.collect { count ->
                 if (count <= 0 || bridge.isDisposed) return@collect
-                if (!opening) {
-                    // bridge 已就绪且不在 openConversation 中，尝试重建
-                    rebuildSubscriptions()
-                } else {
-                    // openConversation 进行中，挂起重待办
-                    rebuildPending = true
-                    log("[v4] bridge recovered during open, rebuild deferred")
-                }
+                log("[v4] bridge recovered (count=$count), scheduling async rebuild")
+                sessionScope.launch { rebuildSubscriptions() }
             }
         }
     }
 
     /** 由 [ZemoteClient.recoverActiveBridges] 在桥接恢复成功后调用，重建握手和所有订阅。 */
+    /**
+     * Bridge 恢复后仅重新注册事件监听 + 重新订阅，不清空任何状态。
+     * 对齐官方 Flutter 的 _resubscribe()：保留 rows/config/revision 等，
+     * 只断掉旧的 frame listener，在新生成的 ChannelClient 上重建。
+     */
     suspend fun rebuildSubscriptions() {
         if (rebuilding) return
         rebuilding = true
         try {
-            log("[v4] bridge recovered, rebuilding subscriptions")
+            log("[v4] bridge recovered, resubscribing only (preserving state)")
+            flushPendingDeltas()
             val hadSessionsIndex = siSubId != null
             val activeId = _activeSessionId.value
-            handshakeDone = false
-            connectionId = null
+            handshakeGen++
+            // 只清理旧的 listener，不清空 rows / stagedFrames / 其他状态
             convWatchdog?.cancel()
             convCancel?.invoke(); convCancel = null
             convSubId = null
             siCancel?.invoke(); siCancel = null
             siSubId = null
-            convSeq = 0
-            siSeq = 0
-            snapshotSeen = false
-            resyncing = false
-            lastFrameAt = System.currentTimeMillis()
-            _pendingPatch = null
             synchronized(stagedFrames) { stagedFrames.clear() }
             synchronized(siStaged) { siStaged.clear() }
+            // 重新握手：新 bridge 需要重新建立 IPC 连接，必须重置状态
+            handshakeDone = false
+            connectionId = null
             runCatching { ensureHandshake() }
                 .onFailure { log("[v4] handshake after recovery failed: $it"); return }
+            // 重新订阅（不重置 rows，快照帧会自动填充）
             if (activeId != null) {
                 runCatching { subscribeConversation(activeId) }
                     .onFailure { log("[v4] resubscribe failed: $it") }
-                runCatching { loadRows(activeId, limit = 200) }
             }
             if (hadSessionsIndex) runCatching { openSessionsIndex() }
         } finally {
@@ -388,24 +465,31 @@ class ConversationV4Session private constructor(
 
     /** hello + clientHello 握手（每个 bridge 连接一次） */
     private suspend fun ensureHandshake() {
+        // 快照当前握手版本，防止并发请求互相干扰
+        val gen = handshakeGen
         if (handshakeDone) return
-        if (!sessionScope.isActive) return
+        if (!sessionScope.isActive) return  // scope 已取消，不发起握手
         val hello = call("helloConversationV4", emptyList(), isActiveCheck = { sessionScope.isActive }) as? Map<*, *>
-        if (!sessionScope.isActive) return  // scope cancelled between calls → bail early
+        if (!sessionScope.isActive) return
+        // 如果握手期间有 rebuildSubscriptions 被触发，停止
+        if (gen != handshakeGen) return
         connectionId = hello?.get("connectionId")?.toString()
-        val initResult = call(
+        // 对齐官方：clientKind 由服务端 hello 返回的 clientMode 决定（desktop 或 web），
+        // appVersion 固定传 'unknown'（与官方一致），避免版本校验拦截
+        val clientMode = hello?.get("clientMode")?.toString()
+        val clientKind = if (clientMode == "desktop-continuous") "desktop" else "web"
+        call(
             "initializeConversationV4",
             listOf(mapOf<String, Any>(
                 "kind" to "clientHello",
                 "protocolVersion" to 3L,
                 "clientId" to CLIENT_ID,
-                "clientKind" to "mobileApp",
-                "appVersion" to PROTOCOL_APP_VERSION,
+                "clientKind" to clientKind,
+                "appVersion" to "unknown",
                 "capabilities" to mapOf("workspaceHookReviewUi" to true),
             )),
-            isActiveCheck = { sessionScope.isActive },
         )
-        if (!sessionScope.isActive) return  // scope cancelled between calls → bail early
+        if (gen != handshakeGen) return  // 重建后跳过
         handshakeDone = true
     }
 
@@ -424,90 +508,106 @@ class ConversationV4Session private constructor(
         } finally {
             opening = false
         }
-        // 打开期间若有 bridge 恢复事件被搁置，现在补做重建
-        if (rebuildPending && !bridge.isDisposed) {
-            rebuildPending = false
-            rebuildSubscriptions()
-        }
-        // 若历史加载失败（rows 为空）但 bridge 已就绪，自动重试一次
-        if (_rows.value.isEmpty() && !opening && !bridge.isDisposed) {
-            log("[v4] openConversation finished with empty rows, triggering recovery reload")
-            rebuildSubscriptions()
-        }
+        // 不再在此处同步触发 rebuild；bridge 恢复事件会通过 init 中的 collector 异步处理
     }
 
     private suspend fun openConversationInternal(sessionId: String?) {
-        // 总超时兜底：任何一步卡住都保证 loading 收敛，界面不会永远转圈
-        kotlinx.coroutines.withTimeout(45_000) {
-            var rowsLoaded = false
-            try {
-                unsubscribeConversation()
-                _activeSessionId.value = sessionId
-                setRows(emptyList())
-                firstRowId = null
-                totalCount = 0
-                convSeq = 0
-                convLogEpoch = null
-                snapshotSeen = false
-                _pendingPatch = null
-                ackedRevisions.clear()
-                synchronized(stagedFrames) { stagedFrames.clear() }
-                synchronized(siStaged) { siStaged.clear() }
-                _loading.value = true
-                // 握手：15s 独立超时，挂起时快速跳过不阻塞整个打开流程
-                runCatching { withTimeout(15_000) { ensureHandshake() } }
-                    .onFailure { log("[v4] handshake failed: $it") }
-                if (!sessionScope.isActive) return@withTimeout
-                // 模型/思考档位选项（prepareWorkspace），后台加载不阻塞会话打开；
-                // 首次拿到空结果时自动重试一次（桌面端冷启动时可能返回空）
-                sessionScope.launch {
-                    runCatching { prepareWorkspace() }
-                    if (_modelOptions.value.isEmpty()) {
-                        delay(3000)
-                        runCatching { prepareWorkspace() }
+        unsubscribeConversation()
+        _activeSessionId.value = sessionId
+        clearPendingDeltas()
+        setRows(emptyList())
+        firstRowId = null
+        totalCount = 0
+        hasMore = false
+        convSeq = 0
+        convLogEpoch = null
+        snapshotSeen = false
+        _pendingPatch = null
+        ackedRevisions.clear()
+        synchronized(stagedFrames) { stagedFrames.clear() }
+        synchronized(siStaged) { siStaged.clear() }
+        _historyState.value = HistoryState.LOADING
+        // 握手已有缓存，通常 < 100ms；超时设短避免阻塞
+        runCatching { withTimeout(5_000) { ensureHandshake() } }
+            .onFailure { log("[v4] handshake failed: $it") }
+        if (!sessionScope.isActive) return
+        // 模型/思考档位选项：后台加载，不阻塞界面
+        sessionScope.launch { runCatching { prepareWorkspace() } }
+        if (sessionId == null) {
+            // 新对话：没有历史可加载
+            _historyState.value = HistoryState.EMPTY
+            return
+        }
+        // 订阅会话：异步启动，不阻塞界面；订阅失败时立刻降级为主动拉窗口，
+        // 否则 UI 会一直停在"加载中"（旧实现就是这样静默失败的）
+        sessionScope.launch {
+            val ok = runCatching { subscribeConversation(sessionId) }.getOrDefault(false)
+            if (!ok && _rows.value.isEmpty() && _historyState.value == HistoryState.LOADING) {
+                log("[v4] subscribe failed, fallback to loadRows")
+                // loadRows 内部会在软失败时把 _historyState 置为 FAILED，
+                // 所以这里不再依赖异常来判断失败
+                runCatching { withTimeout(15_000) { loadRows(sessionId, limit = 200) } }
+                    .onFailure {
+                        log("[v4] loadRows fallback failed: $it")
+                        markHistoryLoadFailed("fallback threw: ${it.message}")
                     }
-                }
-                if (sessionId != null && sessionScope.isActive) {
-                    // subscribe：20s 独立超时
-                    runCatching { withTimeout(20_000) { subscribeConversation(sessionId) } }
-                        .onFailure { log("[v4] subscribe failed: $it") }
-                    if (!sessionScope.isActive) return@withTimeout
-                    // loadRows：15s 独立超时，拿到数据立即关闭加载动画
-                    runCatching { withTimeout(15_000) { loadRows(sessionId, limit = 200) } }
-                        .onFailure { log("[v4] loadRows failed: $it") }
-                    if (_rows.value.isNotEmpty()) rowsLoaded = true
-                    // 兜底：桌面端会话运行时可能未预热，首拉为空时自动补拉两次
-                    if (!_rows.value.isEmpty()) {
-                        rowsLoaded = true
-                    } else {
-                        repeat(2) { attempt ->
-                            if (!sessionScope.isActive) return@withTimeout
-                            delay(if (attempt == 0) 1500L else 3000L)
-                            if (!sessionScope.isActive) return@withTimeout
-                            if (!_rows.value.isEmpty()) {
-                                rowsLoaded = true
-                                return@repeat
-                            }
-                            log("[v4] history empty, retry #$attempt")
-                            runCatching { resyncConversation() }
-                            runCatching { withTimeout(15_000) { loadRows(sessionId, limit = 200) } }
-                                .onFailure { log("[v4] loadRows retry #$attempt failed") }
-                            if (!_rows.value.isEmpty()) rowsLoaded = true
-                        }
+            }
+        }
+        sessionScope.launch {
+            runCatching { openSessionsIndex() }
+                .onFailure { log("[v4] sessions-index open failed: $it") }
+        }
+        // 安全网：2s 内无任何数据则主动拉一次历史窗口。
+        // 只在状态仍是 LOADING 时触发 —— 否则会跟在 fallback 后面重复发一次同样的 RPC。
+        sessionScope.launch {
+            delay(2_000)
+            if (sessionScope.isActive && _rows.value.isEmpty() &&
+                _historyState.value == HistoryState.LOADING
+            ) {
+                log("[v4] 2s 内无数据，触发 loadRows 兜底")
+                runCatching { withTimeout(10_000) { loadRows(sessionId, limit = 200) } }
+                    .onFailure {
+                        log("[v4] loadRows safety net failed: $it")
+                        markHistoryLoadFailed("safety net threw: ${it.message}")
                     }
-                } else {
-                    // 新对话：无需历史，加载完成
-                    rowsLoaded = true
-                }
-            } finally {
-                // rows 已加载则立即关 loading；兜底：超时后也关，防止卡死
-                if (rowsLoaded || !_rows.value.isEmpty()) _loading.value = false
             }
         }
     }
 
-    private suspend fun subscribeConversation(sessionId: String) {
-        if (!sessionScope.isActive) return
+    /** 历史加载失败后的手动重试：重新订阅 + 主动拉一次历史窗口 */
+    suspend fun retryHistory(sessionId: String? = _activeSessionId.value) = withContext(Dispatchers.IO) {
+        val sid = sessionId ?: return@withContext
+        _historyState.value = HistoryState.LOADING
+        runCatching { withTimeout(5_000) { ensureHandshake() } }
+            .onFailure { log("[v4] retryHistory handshake failed: $it") }
+        val ok = runCatching { subscribeConversation(sid) }.getOrDefault(false)
+        if (ok) {
+            // 订阅成功 ≠ 数据到了：桌面端要预热会话运行时，快照可能几秒后才推。
+            // 旧实现只看 subscribe 的返回值，于是「订阅成功但快照没来」时会永久停在
+            // LOADING、页面一直转圈 —— 这是「历史持续加载失败」的另一半原因。
+            var waited = 0L
+            while (waited < 3_000 && _rows.value.isEmpty() && sessionScope.isActive) {
+                delay(200)
+                waited += 200
+            }
+        }
+        if (_rows.value.isEmpty()) {
+            runCatching { withTimeout(15_000) { loadRows(sid, limit = 200) } }
+                .onFailure { log("[v4] retryHistory loadRows failed: $it") }
+        }
+        // loadRows 已经把「确实为空」置为 EMPTY，这里不要把它误判成失败
+        if (_rows.value.isEmpty() && _historyState.value != HistoryState.EMPTY) {
+            _historyState.value = HistoryState.FAILED
+        }
+    }
+
+    /**
+     * 订阅会话帧。返回是否拿到 ack.subscriptionId。
+     * 桌面端可能要预热会话运行时（官方给 60s），超时过短会导致拿不到 ack，
+     * 之后所有历史帧都进不来——表现为"会话一直加载不出来"。这里给足超时并重试一次。
+     */
+    private suspend fun subscribeConversation(sessionId: String): Boolean {
+        if (!sessionScope.isActive) return false
         convCancel?.invoke()
         convCancel = null
         val listener = channels.addEventListener(
@@ -518,19 +618,38 @@ class ConversationV4Session private constructor(
         )
         // 注册后立即保存 listener，无论 subscribeConversationV4 成功或失败都能正确清理
         convCancel = listener
-        // 桌面端可能需要预热会话运行时，订阅要给足超时（官方 60s）
-        val callResult = runCatching {
-            call("subscribeConversationV4", listOf(scope() + mapOf("sessionId" to sessionId)), timeoutMs = 60_000, isActiveCheck = { sessionScope.isActive })
-        }.getOrNull()
-        // scope 已取消（页面离开等）→ 静默退出，不打印噪声日志
-        if (callResult == null) { convCancel?.invoke(); convCancel = null; return }
+        var callResult: Any? = null
+        for (attempt in 0 until 2) {
+            callResult = runCatching {
+                call(
+                    "subscribeConversationV4",
+                    listOf(scope() + mapOf("sessionId" to sessionId)),
+                    timeoutMs = SUBSCRIBE_TIMEOUT_MS,
+                )
+            }.getOrNull()
+            if (callResult != null) break
+            // scope 已取消（页面离开等）→ 静默退出，不打印噪声日志
+            if (!sessionScope.isActive) {
+                convCancel?.invoke(); convCancel = null
+                return false
+            }
+            if (attempt == 0) {
+                log("[v4] subscribeConversationV4 timed out, retrying once")
+                delay(600)
+            }
+        }
+        if (callResult == null) {
+            log("[v4] subscribeConversationV4 failed after retry")
+            convCancel?.invoke(); convCancel = null
+            return false
+        }
         val ack = (callResult as? Map<*, *>)?.get("ack") as? Map<*, *>
         convSubId = ack?.get("subscriptionId")?.toString()
         ack?.get("logEpoch")?.toString()?.let { convLogEpoch = it }
         if (convSubId == null) {
             log("[v4] subscribeConversationV4: missing ack.subscriptionId")
             convCancel?.invoke(); convCancel = null
-            return
+            return false
         }
         // 应答前到达的帧按序回放
         val staged = synchronized(stagedFrames) {
@@ -540,6 +659,7 @@ class ConversationV4Session private constructor(
         }
         staged.forEach { acceptLogicalFrame(it) }
         startWatchdog()
+        return true
     }
 
     private fun unsubscribeConversation() {
@@ -582,8 +702,19 @@ class ConversationV4Session private constructor(
 
     private val fragments = ConcurrentHashMap<String, FragmentAssembly>()
 
+    /** 上一次清理碎片重组缓冲的时间。流式期间每个帧都会走到这里，必须节流。 */
+    private var lastFragmentPurgeAt = 0L
+
+    /**
+     * 丢弃超时未凑齐的分片。
+     * 旧实现对**每个**入站帧都做一次全表 `removeIf` —— 流式输出时帧率很高，
+     * 虽然通常表是空的，但每次都要走一遍 ConcurrentHashMap 的 entries 迭代。
+     * 这里节流到最多 1s 一次；TTL 是 60s，节流不会导致碎片提前被清掉。
+     */
     private fun purgeStaleFragments() {
         val now = System.currentTimeMillis()
+        if (now - lastFragmentPurgeAt < 1_000) return
+        lastFragmentPurgeAt = now
         fragments.entries.removeIf { now - it.value.createdAt > 60_000 }
     }
 
@@ -705,16 +836,25 @@ class ConversationV4Session private constructor(
         (snap["backgroundWorks"] as? List<*>)?.let(::mergeBackgroundWorks)
         val rowsObj = snap["rows"] as? Map<*, *>
         if (rowsObj != null) {
-            val window = (rowsObj["window"] as? List<*>)?.mapNotNull(::parseRow).orEmpty()
-            val head = window.firstOrNull()?.rowId
-            val older = if (head != null) _rows.value.filter { it.rowId < head } else emptyList()
+            val window = (rowsObj["window"] as? List<*>)
+                ?.mapNotNull(::parseRow)
+                .orEmpty()
+            // 窗口之前的更早历史行必须保留；window 为空时不能把已加载的历史清掉
+            val older = if (window.isNotEmpty()) {
+                val head = window.first().rowId
+                _rows.value.filter { it.rowId < head }
+            } else {
+                _rows.value
+            }
             setRows((older + window).sortedBy { it.rowId })
             totalCount = (rowsObj["totalCount"] as? Number)?.toLong() ?: _rows.value.size.toLong()
             firstRowId = (rowsObj["firstRowId"] as? Number)?.toLong()
+            _historyState.value = if (_rows.value.isEmpty()) HistoryState.EMPTY else HistoryState.READY
         } else {
             setRows(emptyList())
             totalCount = 0
             firstRowId = null
+            _historyState.value = HistoryState.EMPTY
         }
     }
 
@@ -727,23 +867,54 @@ class ConversationV4Session private constructor(
         for (raw in ops) {
             val m = raw as? Map<*, *> ?: continue
             when (m["op"] as? String) {
-                "row.appended" -> parseRow(m["row"])?.let { row ->
-                    setRows(_rows.value + row)
-                    totalCount += 1
-                    if (firstRowId == null) firstRowId = row.rowId
+                "row.appended" -> {
+                    flushPendingDeltas()
+                    parseRow(m["row"])?.let { row ->
+                        synchronized(rowsLock) {
+                            val current = _rows.value
+                            val last = current.lastOrNull()
+                            if (last != null && row.rowId <= last.rowId) {
+                                // 乱序 / 重放（如 resync 后服务端重发同一行）→ 退化为 upsert。
+                                // 直接 append 会产生重复 rowId，LazyColumn 的 key 冲突会
+                                // 直接抛异常或把条目错位，这是「行为与预期不符」的来源之一。
+                                mergeRowLocked(row)
+                            } else {
+                                // 该行可能已有先到的流式 delta 被缓冲（row.delta 早于
+                                // row.appended 到达），就地补上，否则这段文本要等下一次
+                                // flush 才出现（流式看起来就是"卡一下才蹦出来"）。
+                                val buffered = synchronized(pendingDeltas) { pendingDeltas.remove(row.rowId) }
+                                val merged = if (buffered != null) {
+                                    var r = row
+                                    for ((path, sb) in buffered.parts) r = appendToRow(r, path, sb.toString())
+                                    r
+                                } else {
+                                    row
+                                }
+                                publishRows(current + merged)
+                                totalCount += 1
+                                if (firstRowId == null) firstRowId = merged.rowId
+                            }
+                        }
+                    }
                 }
-                "row.upserted" -> parseRow(m["row"])?.let(::mergeRow)
+                "row.upserted" -> {
+                    flushPendingDeltas()
+                    parseRow(m["row"])?.let(::mergeRow)
+                }
                 "row.removed" -> {
                     // 保留 rowId < fromRowId 的行（对齐官方 fke 语义）
                     val from = (m["fromRowId"] as? Number)?.toLong() ?: continue
-                    val before = _rows.value.size
-                    setRows(_rows.value.filter { it.rowId < from })
-                    val removed = before - _rows.value.size
-                    if (firstRowId != null && from <= firstRowId!!) {
-                        totalCount = 0
-                        firstRowId = null
-                    } else {
-                        totalCount = (totalCount - removed).coerceAtLeast(0)
+                    flushPendingDeltas()
+                    synchronized(rowsLock) {
+                        val before = _rows.value.size
+                        publishRows(_rows.value.filter { it.rowId < from })
+                        val removed = before - _rows.value.size
+                        if (firstRowId != null && from <= firstRowId!!) {
+                            totalCount = 0
+                            firstRowId = null
+                        } else {
+                            totalCount = (totalCount - removed).coerceAtLeast(0)
+                        }
                     }
                 }
                 "row.delta" -> {
@@ -751,9 +922,11 @@ class ConversationV4Session private constructor(
                         ?: m["rowId"]?.toString()?.toLongOrNull() ?: continue
                     val path = m["path"]?.toString() ?: continue
                     val append = m["append"]?.toString() ?: continue
-                    setRows(_rows.value.map { row ->
-                        if (row.rowId != rid) row else appendToRow(row, path, append)
-                    })
+                    // 不再逐 token 重建列表：先缓冲，由 flushPendingDeltas 批量提交
+                    synchronized(pendingDeltas) {
+                        pendingDeltas.getOrPut(rid) { DeltaBuffer() }.append(path, append)
+                    }
+                    scheduleDeltaFlush()
                 }
                 "state.updated" -> {
                     val patch = m["patch"] as? Map<*, *> ?: continue
@@ -776,6 +949,71 @@ class ConversationV4Session private constructor(
                 }
             }
         }
+        // 安全网：本轮若还有没落到行上的 delta（例如行是随后由 row.upserted 补进来的），
+        // 排一次 flush 把它们提交掉。否则这段文本要等下一个 row.delta 才出现，
+        // 流式末尾就会"卡住不动"。
+        synchronized(pendingDeltas) {
+            if (pendingDeltas.isNotEmpty()) scheduleDeltaFlush()
+        }
+    }
+
+    // ────────────────────────── 流式 delta 批量提交 ──────────────────────────
+
+    private fun scheduleDeltaFlush() {
+        if (deltaFlushJob?.isActive == true) return
+        deltaFlushJob = sessionScope.launch {
+            delay(DELTA_FLUSH_INTERVAL_MS)
+            flushPendingDeltas()
+        }
+    }
+
+    /**
+     * 把缓冲中的流式文本合并进 rows（每个字段一次拼接，而不是每个 token 一次）。
+     * 内容变化不递增结构版本，UI 因此不会重新分组、不会重排整张列表。
+     *
+     * 注意：**只移除真正落到行上的那些 delta**。旧实现一进来就把整个
+     * `pendingDeltas` 清空，凡是本轮没在 `rows` 里找到对应行的 delta 就被
+     * 静默丢弃（流式期间 `row.delta` 先于 `row.appended` 到达、或行位于尚未
+     * 加载的历史窗口里都会命中），表现为「AI 回复少了一段字」。
+     */
+    private fun flushPendingDeltas() {
+        val batch: Map<Long, DeltaBuffer>
+        synchronized(pendingDeltas) {
+            if (pendingDeltas.isEmpty()) return
+            batch = HashMap(pendingDeltas)
+        }
+        synchronized(rowsLock) {
+            val current = _rows.value
+            if (current.isEmpty()) return
+            var changed = false
+            val applied = ArrayList<Long>(batch.size)
+            val updated = ArrayList<ConvRow>(current.size)
+            for (row in current) {
+                val buf = batch[row.rowId]
+                if (buf == null) {
+                    updated.add(row)
+                    continue
+                }
+                var merged = row
+                for ((path, sb) in buf.parts) merged = appendToRow(merged, path, sb.toString())
+                if (merged !== row) changed = true
+                applied.add(row.rowId)
+                updated.add(merged)
+            }
+            synchronized(pendingDeltas) {
+                applied.forEach { pendingDeltas.remove(it) }
+                // 兜底：行始终没到（例如服务端只发了 delta）时不要让缓冲无限增长
+                if (pendingDeltas.size > 512) pendingDeltas.clear()
+            }
+            if (changed) publishRows(updated)
+        }
+    }
+
+    /** 丢弃未提交的流式缓冲（切换会话 / 释放时调用） */
+    private fun clearPendingDeltas() {
+        deltaFlushJob?.cancel()
+        deltaFlushJob = null
+        synchronized(pendingDeltas) { pendingDeltas.clear() }
     }
 
     /** 追加流式文本：字段按行类型严格对应（对齐官方 dke） */
@@ -837,29 +1075,150 @@ class ConversationV4Session private constructor(
 
     // ────────────────────────── 历史窗口 ──────────────────────────
 
+    /**
+     * 历史加载串行化。
+     *
+     * 打开会话时有三条兜底路径可能同时发起加载（订阅失败回退 / 2s 安全网 /
+     * 用户手动重试），旧实现让它们并发跑：同一条请求被重复下发，
+     * 先返回的页会被后返回的页覆盖，表现为历史时多时少甚至一片空白。
+     */
+    private val historyLoadMutex = Mutex()
+
+    /**
+     * 把「历史加载失败」显式落到 [HistoryState.FAILED]。
+     *
+     * 这是「会话历史持续加载失败、界面一直转圈」的根因修复点：
+     * 旧实现里 `loadRows` 的**软失败**分支（响应结构不对 / 缺少 rows 字段）
+     * 只写日志然后 `return _rows.value`，从不抛异常；而所有调用方都是
+     * `runCatching { loadRows(...) }.onFailure { _historyState = FAILED }`，
+     * 于是 FAILED 永远不会被设置 —— 页面永远停在 LOADING，连重试按钮都出不来。
+     */
+    private fun markHistoryLoadFailed(reason: String) {
+        log("[v4] history load failed: $reason")
+        if (_rows.value.isEmpty()) _historyState.value = HistoryState.FAILED
+    }
+
     /** 历史行窗口（分页：beforeRowId 传当前最早一行的 rowId） */
-    suspend fun loadRows(sessionId: String, limit: Int = 200, beforeRowId: String? = null, timeoutMs: Long = 15_000): List<ConvRow> = withContext(Dispatchers.IO) {
+    suspend fun loadRows(
+        sessionId: String,
+        limit: Int = 200,
+        beforeRowId: String? = null,
+        timeoutMs: Long = 15_000,
+    ): List<ConvRow> = withContext(Dispatchers.IO) {
         if (!sessionScope.isActive) return@withContext _rows.value
+        historyLoadMutex.withLock { loadRowsLocked(sessionId, limit, beforeRowId, timeoutMs) }
+    }
+
+    /** [loadRows] 的实际实现，调用方已持有 [historyLoadMutex]。 */
+    private suspend fun loadRowsLocked(
+        sessionId: String,
+        limit: Int,
+        beforeRowId: String?,
+        timeoutMs: Long,
+    ): List<ConvRow> {
+        if (!sessionScope.isActive) return _rows.value
+        // 三条兜底路径会重复发起初始加载：只要已经有人把历史填进来了就直接跳过，
+        // 既省一次 RPC，也避免两条响应互相覆盖。
+        if (beforeRowId == null && _rows.value.isNotEmpty()) return _rows.value
+
         val args = scope() + buildMap<String, Any> {
             put("sessionId", sessionId)
             put("limit", limit.toLong())
             if (beforeRowId != null) put("beforeRowId", beforeRowId)
         }
-        ZemoteLogger.info("v4", "loadRows sessionId=$sessionId limit=$limit")
-        val res = call("conversationRowsRangeV4", listOf(args), timeoutMs = timeoutMs, isActiveCheck = { sessionScope.isActive }) as? Map<*, *> ?: run {
-            log("[v4] loadRows: unexpected response shape")
-            return@withContext _rows.value
+        ZemoteLogger.info("v4", "loadRows sessionId=$sessionId limit=$limit beforeRowId=$beforeRowId")
+
+        val res = try {
+            call("conversationRowsRangeV4", listOf(args), timeoutMs = timeoutMs) as? Map<*, *>
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            markHistoryLoadFailed("call threw: ${e.message}")
+            return _rows.value
+        }
+        if (res == null) {
+            markHistoryLoadFailed("unexpected response shape")
+            return _rows.value
         }
         ZemoteLogger.info("v4", "loadRows response keys=${res.keys.toList()}")
-        val container = (res["rows"] as? Map<*, *>) ?: res
-        val list = container["rows"] as? List<*> ?: run {
-            log("[v4] loadRows: missing rows list")
-            return@withContext _rows.value
+
+        // 兼容两种响应形状：`{rows:[...], hasMore, atLogEpoch}` 与
+        // `{rows:{rows:[...], hasMore, atLogEpoch}}`。旧实现只从 container 读字段，
+        // 遇到外层形状时 hasMore / atLogEpoch 会从错误层级取（取不到 → 翻页提前终止）。
+        val container = res["rows"] as? Map<*, *>
+        val list = (container?.get("rows") as? List<*>) ?: (res["rows"] as? List<*>)
+        if (list == null) {
+            markHistoryLoadFailed("missing rows list (keys=${res.keys.toList()})")
+            return _rows.value
         }
-        ZemoteLogger.info("v4", "loadRows got ${list.size} rows raw")
-        mergeRows(list.mapNotNull(::parseRow))
-        log("[v4] loadRows got ${list.size} rows (total=${_rows.value.size})")
-        _rows.value
+        fun field(name: String): Any? = container?.get(name) ?: res[name]
+
+        // 官方语义：分页响应的 atLogEpoch 与当前快照不一致，说明期间发生过重建/resync，
+        // 这一页属于旧纪元，必须整体丢弃，否则会把旧数据拼进当前时间线。
+        val atLogEpoch = field("atLogEpoch")?.toString()
+        val currentEpoch = convLogEpoch
+        if (beforeRowId != null && atLogEpoch != null && currentEpoch != null && atLogEpoch != currentEpoch) {
+            log("[v4] loadRows page epoch mismatch ($atLogEpoch != $currentEpoch), discarded")
+            return _rows.value
+        }
+
+        val newRows = list.mapNotNull(::parseRow)
+        ZemoteLogger.info("v4", "loadRows got ${newRows.size} rows raw")
+        if (beforeRowId != null) {
+            // 分页加载：只保留 rowId < beforeRowId 的新行，追加到已有行的头部
+            val cursor = beforeRowId.toLongOrNull() ?: return _rows.value
+            val older = newRows.filter { it.rowId < cursor }
+            if (older.isEmpty()) {
+                // 服务端确认没有更早的行了，避免 UI 反复触发加载
+                hasMore = false
+                return _rows.value
+            }
+            val combined = older.sortedBy { it.rowId } + _rows.value
+            setRows(combined)
+            // 只有还不知道服务端最早行时才回填（对齐官方 `firstRowId ?? row.rowId`）。
+            // 这里绝不能用本地已加载的最早行去覆盖快照给的 firstRowId：那会把
+            // hasOlderHistory 的兜底判断变成 `oldest > oldest`（恒 false），
+            // 一旦服务端某次分页响应没带 hasMore，翻页就会提前终止、更早的历史再也拉不出来。
+            if (firstRowId == null) firstRowId = combined.firstOrNull()?.rowId
+        } else {
+            // 初始加载：直接替换
+            setRows(newRows.sortedBy { it.rowId })
+            if (firstRowId == null) firstRowId = newRows.firstOrNull()?.rowId
+        }
+        totalCount = (field("totalCount") as? Number)?.toLong() ?: _rows.value.size.toLong()
+        hasMore = (field("hasMore") as? Boolean) == true
+        if (_rows.value.isNotEmpty()) {
+            _historyState.value = HistoryState.READY
+        } else if (_historyState.value != HistoryState.FAILED) {
+            // 服务端明确返回了空窗口 → 这条会话确实没有历史（不是失败）
+            _historyState.value = HistoryState.EMPTY
+        }
+        log("[v4] loadRows done: ${_rows.value.size} rows (firstRowId=$firstRowId total=$totalCount hasMore=$hasMore)")
+        return _rows.value
+    }
+
+    /**
+     * 是否还有更早的历史可加载。
+     * 旧实现用服务端返回的 `firstRowId` 作为分页游标——那是"服务端最早的行"，
+     * 拿它当 beforeRowId 去问"比它更早的行"必然返回空，翻页永远拿不到数据。
+     * 正确做法：用当前已加载的最早一行 rowId 当游标。
+     */
+    val hasOlderHistory: Boolean
+        get() {
+            val oldest = _rows.value.firstOrNull()?.rowId ?: return false
+            val serverFirst = firstRowId
+            return hasMore || (serverFirst != null && oldest > serverFirst)
+        }
+
+    /** 向上翻页：加载当前最早行之前的更早历史，追加到列表头部。 */
+    suspend fun loadOlderMessages(sessionId: String): Boolean = withContext(Dispatchers.IO) {
+        val oldestRowId = _rows.value.firstOrNull()?.rowId ?: return@withContext false
+        if (!hasOlderHistory) return@withContext false
+        log("[v4] loadOlderMessages cursor=$oldestRowId size=${_rows.value.size} hasMore=$hasMore")
+        val loaded = runCatching {
+            withTimeout(15_000) { loadRows(sessionId, limit = 100, beforeRowId = oldestRowId.toString()) }
+        }.getOrNull()
+        loaded != null && _rows.value.isNotEmpty()
     }
 
     // ────────────────────────── 命令 ──────────────────────────
@@ -868,17 +1227,20 @@ class ConversationV4Session private constructor(
      * 发送用户文本。sessionId 为空时走官方首发路径：createSession 携带
      * firstInput（避免 send-before-subscribe 竞态），随后订阅新会话。
      * [attachments] 为 attachmentPut 返回的描述符（ref/fileName/mime/bytes）。
+     *
+     * 返回 [SendOutcome]：调用方必须据此判断是否真的发出去了（官方语义）。
      */
     suspend fun sendText(
         text: String,
         sessionId: String? = _activeSessionId.value,
         requestedDelivery: String = "startNow",
         attachments: List<Map<String, Any?>>? = null,
-    ): String? = withContext(Dispatchers.IO) {
+    ): SendOutcome = withContext(Dispatchers.IO) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return@withContext sessionId
+        if (trimmed.isEmpty()) return@withContext SendOutcome.Accepted(sessionId)
         var target = sessionId
         if (target == null) {
+            // 首发走 createSession.firstInput：官方此路径不带 requestedDelivery
             val firstInput = buildMap<String, Any> {
                 put("text", trimmed)
                 if (!attachments.isNullOrEmpty()) put("attachments", attachments)
@@ -887,21 +1249,58 @@ class ConversationV4Session private constructor(
                 "workspaceId" to workspaceKey,
                 "firstInput" to firstInput,
             ))
-            target = extractNewSessionId(res) ?: return@withContext null
-            _activeSessionId.value = target
-            ZemoteLogger.action("创建新会话: $target")
-            runCatching { subscribeConversation(target) }
-                .onFailure { log("[v4] subscribe(new) failed: $it") }
-        } else {
-            // 队列语义由桌面端 inputRouting 决定，sendText 只带 text/attachments（官方行为）
-            val payload = buildMap<String, Any> {
-                put("text", trimmed)
-                if (!attachments.isNullOrEmpty()) put("attachments", attachments)
+            val map = res as? Map<*, *>
+            val newId = extractNewSessionId(res)
+            if (newId == null) {
+                return@withContext SendOutcome.Rejected(
+                    reasonCode = map?.get("reasonCode")?.toString(),
+                    message = map?.get("message")?.toString(),
+                )
             }
-            ZemoteLogger.info("v4", "发送消息: ${trimmed.take(60)}${if (trimmed.length > 60) "…" else ""} 会话=$target")
-            sendCommand(target, "sendText", payload)
+            _activeSessionId.value = newId
+            ZemoteLogger.action("创建新会话: $newId")
+            runCatching { subscribeConversation(newId) }
+                .onFailure { log("[v4] subscribe(new) failed: $it") }
+            return@withContext SendOutcome.Accepted(newId)
         }
-        target
+        // requestedDelivery 必须带上：否则「排队」按钮和「发送」按钮在协议层完全一样
+        val payload = buildMap<String, Any> {
+            put("text", trimmed)
+            if (requestedDelivery.isNotBlank()) put("requestedDelivery", requestedDelivery)
+            if (!attachments.isNullOrEmpty()) put("attachments", attachments)
+        }
+        ZemoteLogger.info(
+            "v4",
+            "发送消息[$requestedDelivery]: ${trimmed.take(60)}${if (trimmed.length > 60) "…" else ""} 会话=$target",
+        )
+        var res = sendCommand(target, "sendText", payload) as? Map<*, *>
+        if (res == null) {
+            // sessionScope 已失效（页面离开/设备断开），如实上报而不是假装成功
+            return@withContext SendOutcome.Rejected("session-inactive", null)
+        }
+        // 队列被占用：官方要求客户端明确处置方式。这里自动按「保留队列」重试一次
+        // （绝不静默丢弃用户已排队的消息），仍失败就如实报错交给 UI 提示。
+        if (res["reasonCode"]?.toString() == HELD_QUEUE_STALE) {
+            val heldIds = _queueItems.value.map { it.queueItemId }
+            if (heldIds.isNotEmpty()) {
+                log("[v4] held queue conflict, retrying with keepQueueAndSend (${heldIds.size} items)")
+                val retry = HashMap<String, Any>(payload).apply {
+                    put("heldQueueDisposition", "keepQueueAndSend")
+                    put("expectedHeldQueueItemIds", heldIds)
+                }
+                res = sendCommand(target, "sendText", retry) as? Map<*, *>
+            }
+        }
+        val status = res?.get("status")?.toString()
+        if (status == null || status in SEND_OK_STATUSES) {
+            SendOutcome.Accepted(target)
+        } else {
+            log("[v4] sendText rejected: status=$status reason=${res?.get("reasonCode")} ${res?.get("message") ?: ""}")
+            SendOutcome.Rejected(
+                reasonCode = res?.get("reasonCode")?.toString() ?: status,
+                message = res?.get("message")?.toString(),
+            )
+        }
     }
 
     /**
@@ -1002,7 +1401,7 @@ class ConversationV4Session private constructor(
             // 官方模式: if(u) try{await e.attachmentAbortV4(s)}catch...throw t
             if (!committed) {
                 runCatching {
-                    call("attachmentAbortV4", listOf(abortParams), isActiveCheck = { sessionScope.isActive })
+                    call("attachmentAbortV4", listOf(scope() + abortParams), isActiveCheck = { sessionScope.isActive })
                 }.onFailure { log("[v4] attachmentAbortV4 failed: $it") }
             }
             throw e
@@ -1141,7 +1540,7 @@ class ConversationV4Session private constructor(
             put("payload", payload)
             put("issuedAt", System.currentTimeMillis())
         }
-        var res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to envelope)), timeoutMs, isActiveCheck = { sessionScope.isActive })
+        var res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to envelope)), timeoutMs)
         val map = res as? Map<*, *>
         if (sessionId != null && map?.get("status") == "stale") {
             val serverRevision = (map["revisionAtDecision"] as? Number)?.toLong() ?: 0L
@@ -1154,7 +1553,7 @@ class ConversationV4Session private constructor(
                 put("baseRevision", serverRevision)
                 put("issuedAt", System.currentTimeMillis())
             }
-            res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to retry)), timeoutMs, isActiveCheck = { sessionScope.isActive })
+            res = call("sendConversationCommandV4", listOf(scope() + mapOf("envelope" to retry)), timeoutMs)
         }
         // 记录 ack 携带的 revision；已接受的命令使 revision +1，作为下次 CAS 基准
         val ack = res as? Map<*, *>
@@ -1563,13 +1962,44 @@ class ConversationV4Session private constructor(
         )
     }
 
-    private fun mergeRows(incoming: List<ConvRow>) {
-        val byId = _rows.value.associateBy { it.rowId }.toMutableMap()
-        incoming.forEach { byId[it.rowId] = it }
-        setRows(byId.values.sortedBy { it.rowId })
+    /**
+     * 按 rowId 合并单行（`row.upserted` 路径）。
+     *
+     * 旧实现是 `_rows.value.associateBy { it.rowId }` + 全表 `sortedBy`：每来一次
+     * upsert 就建一张 n 元素的 HashMap 再整体排序，O(n log n) 且分配 n 个节点。
+     * 流式期间工具行的状态会被反复 upsert（running → complete），一次长会话
+     * 每秒能做几十次，这就是「页面渲染慢」的主要来源之一。
+     *
+     * 现在改为二分定位 + 就地替换/插入：O(log n) 查找 + O(n) 复制（不可避免，
+     * 因为要产出新的不可变列表），但不再有 map 分配与排序。
+     * 前提不变量：`_rows.value` 始终按 rowId 升序（applySnapshot / loadRows /
+     * row.appended / row.removed 都维持这个顺序）。
+     */
+    private fun mergeRow(row: ConvRow) {
+        synchronized(rowsLock) { mergeRowLocked(row) }
     }
 
-    private fun mergeRow(row: ConvRow) = mergeRows(listOf(row))
+    /** 调用方必须已持有 [rowsLock]。 */
+    private fun mergeRowLocked(row: ConvRow) {
+        val current = _rows.value
+        val idx = current.binarySearch { it.rowId.compareTo(row.rowId) }
+        if (idx >= 0) {
+            val old = current[idx]
+            // 内容一致 → 保留旧实例，不发布（维持「未变行复用同一实例」不变量）
+            if (old == row) return
+            val updated = ArrayList<ConvRow>(current.size)
+            updated.addAll(current)
+            updated[idx] = row
+            publishRows(updated)
+        } else {
+            val ins = -(idx + 1)
+            val updated = ArrayList<ConvRow>(current.size + 1)
+            updated.addAll(current.subList(0, ins))
+            updated.add(row)
+            updated.addAll(current.subList(ins, current.size))
+            publishRows(updated)
+        }
+    }
 
     private suspend fun call(
         method: String,
@@ -1580,6 +2010,7 @@ class ConversationV4Session private constructor(
         channels.call(ChannelClient.Channel.ZCODE_AGENT, method, args, timeoutMs, isActiveCheck)
 
     fun dispose() {
+        clearPendingDeltas()
         unsubscribeConversation()
         siCancel?.invoke()
         siCancel = null

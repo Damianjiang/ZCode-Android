@@ -87,6 +87,7 @@
     <string name="uploading_files">Uploading attachment %1$d/%2$d</string>
     <string name="uploading_progress">Uploading attachment %1$d/%2$d · %3$d%%</string>
     <string name="create_session_failed">Failed to create session</string>
+    <string name="send_rejected">Message not sent: %1$s</string>
     <string name="back">Back</string>
 
     <string name="tool_run">Ran a command</string>
@@ -194,4 +195,48 @@
     <string name="debug_logs_off">Off</string>
     <string name="debug_logs_view">View Logs</string>
     <string name="debug_logs_view_sub">Records requests/responses/actions, copy to share with developers</string>
+    <string name="cache_crash_report">Crash report</string>
+    <string name="cache_crash_report_sub">Diagnostic log from the last crash (%1$s)</string>
+    <!-- 以下 41 条原先在 values-en 中缺失，英文界面会回落到中文 -->
+    <string name="load_older_messages">Load older messages</string>
+    <string name="loading_older_messages">Loading…</string>
+    <string name="section_display">Display</string>
+    <string name="max_messages_label">Messages to keep</string>
+    <string name="max_messages_sub">Show up to %1$d (100 recommended)</string>
+    <string name="max_messages_saved">Saved: showing %1$d</string>
+    <string name="section_cache">Storage</string>
+    <string name="cache_sessions">Session cache</string>
+    <string name="cache_sessions_sub">Clear data from disconnected workspaces (cloud messages are kept)</string>
+    <string name="cache_logs">Debug logs</string>
+    <string name="cache_logs_sub">Clear local protocol records (your chats are kept)</string>
+    <string name="cache_clear_all">Clear all cache</string>
+    <string name="cache_cleared">Cache cleared</string>
+    <string name="scroll_to_bottom">Jump to latest</string>
+    <string name="has_new_messages">New messages</string>
+    <string name="tasks_panel">Tasks</string>
+    <string name="permission_request_title">Permission required</string>
+    <string name="permission_allow">Allow</string>
+    <string name="permission_deny">Deny</string>
+    <string name="permission_always">Always allow</string>
+    <string name="elicitation_request_title">Input required</string>
+    <string name="elicitation_submit">Submit</string>
+    <string name="task_running">Running</string>
+    <string name="task_cancel">Cancel</string>
+    <string name="task_no_work">No background tasks</string>
+    <string name="cache_clean_title">Clean cache</string>
+    <string name="cache_clean_subtitle">Pick what to clean up and free some space</string>
+    <string name="cache_scanning">Scanning…</string>
+    <string name="cache_cleaning">Cleaning…</string>
+    <string name="cache_clean_done">Done</string>
+    <string name="cache_clean_done_hint">Selected cache data has been cleared</string>
+    <string name="cache_scan_again">Scan again</string>
+    <string name="cache_clean_now">Clean now</string>
+    <string name="cache_select_all">Select all</string>
+    <string name="cache_items_selected">%1$d/%2$d selected</string>
+    <string name="cache_selected_total">%1$s selected</string>
+    <string name="cache_empty">Nothing to clean up</string>
+    <string name="cache_app_dir">App cache</string>
+    <string name="cache_app_dir_sub">Temporary files created at runtime (%1$s)</string>
+    <string name="cache_settings">Settings data</string>
+    <string name="cache_settings_sub">Local config cache (%1$s)</string>
 </resources>

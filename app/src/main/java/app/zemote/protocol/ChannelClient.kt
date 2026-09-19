@@ -47,7 +47,15 @@ class ChannelClient(
         ZCODE_AGENT("zcode-agent"), ZCODE_SESSION("zcode-session"), ZCODE_TASK("zcode-task"),
     }
 
-    private var lastRequestId = 0
+    /**
+     * 请求 ID 生成器。
+     * 必须是原子的：`call()` 与 `addEventListener()` 会从不同线程并发取号，
+     * 旧实现用普通 `var` 自增，撞号时后写的 completer 会覆盖前一个，
+     * 前一个请求就永远等不到应答 → 30s 超时（表现是"bridge 请求又慢又爱失败"）。
+     */
+    private val requestIdSeq = java.util.concurrent.atomic.AtomicInteger(0)
+
+    private fun nextRequestId(): Int = requestIdSeq.getAndIncrement()
 
     /**
      * 桌面端通道就绪信号。
@@ -133,14 +141,15 @@ class ChannelClient(
     ): Any? {
         awaitReady(30_000L, isActiveCheck)
         if (!isActiveCheck()) return null
-        val id = lastRequestId++
+        val id = nextRequestId()
         val completer = CompletableDeferred<Pair<Int, Any?>>()
         promiseHandlers[id] = completer
         val writer = ValueWriter()
         encodeValue(writer, listOf(REQ_PROMISE, id, channel.channelName, method))
         encodeValue(writer, args)
         sendBody(writer.toByteArray())
-        ZemoteLogger.info("ipc", "→ ${channel.channelName}.$method id=$id")
+        // 日志开关关闭时连字符串都不拼（每次 RPC 两条日志，热路径上白建字符串+格式化时间）
+        if (ZemoteLogger.enabled) ZemoteLogger.debug("ipc", "→ ${channel.channelName}.$method id=$id")
         // 在 await 前再次检查，防止 scope 在此窗口期内被取消
         // （LeftCompositionCancellationException 不是 CancellationException 子类，
         //  不会被上一个 catch 捕获，会走到 Exception catch 抛出 TimeoutException）
@@ -164,7 +173,7 @@ class ChannelClient(
             onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
             throw TimeoutException("${channel.channelName}.$method timed out")
         }
-        ZemoteLogger.info("ipc", "← ${channel.channelName}.$method id=$id type=$resType")
+        if (ZemoteLogger.enabled) ZemoteLogger.debug("ipc", "← ${channel.channelName}.$method id=$id type=$resType")
         return when (resType) {
             RES_PROMISE_SUCCESS -> data
             RES_PROMISE_ERROR, RES_PROMISE_ERROR_OBJ -> throw ChannelRpcError(data?.toString() ?: "unknown error", data)
@@ -182,8 +191,11 @@ class ChannelClient(
         onEvent: (Any?) -> Unit,
         arg: Any? = null,
     ): () -> Unit {
-        val id = lastRequestId++
-        val cancelled = AtomicBoolean(false)
+        val id = nextRequestId()
+        // sent：LISTEN 是否已真正发出（决定注销时是否需要发 DISPOSE）
+        // disposed：是否已被调用方注销（防止 LISTEN 在注销之后才发出去）
+        val sent = AtomicBoolean(false)
+        val disposed = AtomicBoolean(false)
         eventHandlers[id] = onEvent
         // 等桌面端 Initialize 到达后再发注册请求（先发的注册会被静默丢弃）
         scope.launch {
@@ -194,11 +206,11 @@ class ChannelClient(
                 eventHandlers.remove(id)
                 return@launch
             }
-            if (cancelled.get()) {
+            if (disposed.get()) {
                 eventHandlers.remove(id)
                 return@launch
             }
-            cancelled.set(true) // 原子标记"已发送"，防止 cancel() 与本文之间出现竞态
+            sent.set(true)
             onLog?.invoke("[ipc] listen ${channel.channelName}.$event id=$id")
             val writer = ValueWriter()
             encodeValue(writer, listOf(REQ_EVENT_LISTEN, id, channel.channelName, event))
@@ -206,13 +218,16 @@ class ChannelClient(
             sendBody(writer.toByteArray())
         }
         return {
-            cancelled.set(true)
-            eventHandlers.remove(id)
-            if (cancelled.get()) { // 已发送过 LISTEN → 需要发 DISPOSE 通知桌面端
-                val writer = ValueWriter()
-                encodeValue(writer, listOf(REQ_EVENT_DISPOSE, id, channel.channelName, event))
-                encodeValue(writer, null)
-                sendBody(writer.toByteArray())
+            // 幂等：重复调用只生效一次
+            if (disposed.compareAndSet(false, true)) {
+                eventHandlers.remove(id)
+                // 只有 LISTEN 真的发出去过，才需要通知桌面端注销
+                if (sent.get()) {
+                    val writer = ValueWriter()
+                    encodeValue(writer, listOf(REQ_EVENT_DISPOSE, id, channel.channelName, event))
+                    encodeValue(writer, null)
+                    sendBody(writer.toByteArray())
+                }
             }
         }
     }

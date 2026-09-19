@@ -105,8 +105,11 @@ if $darwin; then
     GRADLE_OPTS="$GRADLE_OPTS \"-Xdock:name=$APP_NAME\" \"-Xdock:icon=$APP_HOME/media/gradle.icns\""
 fi
 
-# For Cygwin, switch paths to Windows format before running java
-if $cygwin ; then
+# For Cygwin or MSYS/MinGW (Git Bash), switch paths to Windows format before running java.
+# 注意：上面 MINGW* 分支已经置 msys=true，但旧脚本只在 $cygwin 下做转换，
+# 导致 Git Bash 里 APP_HOME/CLASSPATH 仍是 /c/... 形式，Windows 的 java.exe
+# 找不到 gradle-wrapper.jar，报 "找不到或无法加载主类 GradleWrapperMain"。
+if $cygwin || $msys ; then
     APP_HOME=`cygpath --path --mixed "$APP_HOME"`
     CLASSPATH=`cygpath --path --mixed "$CLASSPATH"`
     JAVACMD=`cygpath --unix "$JAVACMD"`

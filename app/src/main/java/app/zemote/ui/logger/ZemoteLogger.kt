@@ -2,13 +2,16 @@ package app.zemote.ui.logger
 
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.concurrent.ConcurrentLinkedQueue
+import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 进程内调试日志收集器。
@@ -34,6 +37,19 @@ object ZemoteLogger {
     }
 
     private const val MAX_ENTRIES = 1000
+
+    /**
+     * 单条日志的最大字符数。
+     *
+     * 环形缓冲要保留 1000 条，不设上限时**一条**几 MB 的 payload dump
+     * （例如 `bootstrap` 的整份响应 toString）就会吃掉几十 MB 内存，
+     * 并且把有用的日志全部挤出缓冲。这里统一截断，保护所有调用点。
+     */
+    private const val MAX_MESSAGE_CHARS = 4_000
+
+    /** 日志发布节流间隔：避免每条日志都做一次 1000 元素列表快照 + Compose 状态写入 */
+    private const val PUBLISH_INTERVAL_MS = 300L
+
     private val _entries = mutableStateOf<List<LogEntry>>(emptyList())
     private val _entriesFlow = MutableStateFlow<List<LogEntry>>(emptyList())
     val entries: State<List<LogEntry>> get() = _entries
@@ -45,10 +61,18 @@ object ZemoteLogger {
         get() = _enabled.get()
         set(value) = _enabled.set(value)
 
-    private var _nextId = 0
+    private val _nextId = java.util.concurrent.atomic.AtomicInteger(0)
     private val _lock = Any()
-    private val _queue = ConcurrentLinkedQueue<LogEntry>()
-    private val _fmt = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+    private val _queue = ArrayDeque<LogEntry>()
+    private val _publishScheduled = AtomicBoolean(false)
+    private val _scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * 线程安全的时间格式化。
+     * 旧实现用的 `SimpleDateFormat` 不是线程安全的，而日志会从多个 IO 线程写入，
+     * 可能格式化出错乱时间甚至抛异常。
+     */
+    private val _fmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")
 
     fun debug(tag: String, message: String) = log(Level.DEBUG, tag, message)
     fun info(tag: String, message: String) = log(Level.INFO, tag, message)
@@ -60,28 +84,47 @@ object ZemoteLogger {
 
     private fun log(level: Level, tag: String, message: String) {
         if (!_enabled.get()) return
+        val trimmed = message.trim()
+        val text = if (trimmed.length > MAX_MESSAGE_CHARS) {
+            trimmed.take(MAX_MESSAGE_CHARS) + "…[已截断，原长 ${trimmed.length} 字符]"
+        } else {
+            trimmed
+        }
         val entry = LogEntry(
-            id = _nextId++,
+            id = _nextId.getAndIncrement(),
             level = level,
             tag = tag,
-            message = message.trim(),
-            timestamp = _fmt.format(java.util.Date()),
+            message = text,
+            timestamp = _fmt.format(java.time.LocalTime.now()),
         )
-        _queue.add(entry)
         synchronized(_lock) {
-            while (_queue.size > MAX_ENTRIES) _queue.poll()
-            val snapshot = _queue.toList().reversed()
-            _entries.value = snapshot
-            _entriesFlow.value = snapshot
+            _queue.addLast(entry)
+            while (_queue.size > MAX_ENTRIES) _queue.removeFirst()
+        }
+        schedulePublish()
+    }
+
+    /**
+     * 节流发布：高频日志（协议帧、流式输出）下，每条都重建列表既浪费 CPU
+     * 又会触发大量 Compose 状态写入。这里合并到约 3 次/秒。
+     */
+    private fun schedulePublish() {
+        if (!_publishScheduled.compareAndSet(false, true)) return
+        _scope.launch {
+            delay(PUBLISH_INTERVAL_MS)
+            _publishScheduled.set(false)
+            publish()
         }
     }
 
+    private fun publish() {
+        val snapshot = synchronized(_lock) { _queue.toList().asReversed() }
+        _entries.value = snapshot
+        _entriesFlow.value = snapshot
+    }
+
     fun clear() {
-        synchronized(_lock) {
-            _queue.clear()
-            val empty = emptyList<LogEntry>()
-            _entries.value = empty
-            _entriesFlow.value = empty
-        }
+        synchronized(_lock) { _queue.clear() }
+        publish()
     }
 }

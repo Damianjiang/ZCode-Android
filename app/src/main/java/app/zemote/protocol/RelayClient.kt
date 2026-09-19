@@ -1,6 +1,7 @@
 package app.zemote.protocol
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,12 +35,14 @@ class RelayClient(
         const val WAITING_TIMEOUT_MS = 30_000L
         const val RECONNECT_WAIT_TIMEOUT_MS = 20_000L
         const val DEAD_LINK_THRESHOLD_MS = 25_000L
+        /** Cached Gson — creating a new instance per message is expensive. */
+        private val gson = com.google.gson.Gson()
     }
 
     private val _state = MutableStateFlow(RelayState.IDLE)
     val state: StateFlow<RelayState> = _state
 
-    private val _payloads = MutableSharedFlow<Map<String, Any>>(replay = 0, extraBufferCapacity = 64)
+    private val _payloads = MutableSharedFlow<Map<String, Any>>(replay = 0, extraBufferCapacity = 256)
     val payloads: Flow<Map<String, Any>> = _payloads
 
     private val _failures = MutableSharedFlow<RelayFailure>(replay = 0, extraBufferCapacity = 8)
@@ -47,8 +50,8 @@ class RelayClient(
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .writeTimeout(0, TimeUnit.MILLISECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)   // 空闲 30s 无数据视为死链，触发 re-poke
+        .writeTimeout(10, TimeUnit.SECONDS)  // 写超时防止队列堆积
         .build()
 
     private var webSocket: WebSocket? = null
@@ -72,6 +75,24 @@ class RelayClient(
     private var reconnectJob: Job? = null
     private var rewaitJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * 入站 payload 的**单一消费者**队列。
+     *
+     * 旧实现是 `scope.launch { _payloads.emit(map) }`——每收到一个 rpc-frame 就新建一个协程。
+     * 流式输出时帧率很高，而 `MutableSharedFlow.emit` 在订阅者跟不上时会挂起，
+     * 于是协程不断堆积、帧的投递延迟越拉越大（表现就是"bridge 取信息很慢"），
+     * 而且跨协程投递无法保证顺序（分片重组的 messageSeq 会乱序）。
+     *
+     * 改成：WebSocket 回调只做 trySend（无锁、不阻塞 OkHttp 读线程），
+     * 由下面这一个常驻协程按到达顺序转发到 SharedFlow。队列无界 → 不丢帧、不堆积协程。
+     */
+    private val inboundQueue = Channel<Map<String, Any>>(Channel.UNLIMITED)
+    private val inboundDispatcher: Job = scope.launch {
+        for (payload in inboundQueue) {
+            _payloads.emit(payload)
+        }
+    }
 
     /**
      * Sends a relay payload. If not yet PAIRED, queues it (up to 100).
@@ -203,12 +224,11 @@ class RelayClient(
     private fun sendFrame(frame: Map<String, Any>) {
         val ws = webSocket
         if (ws == null) return
-        val json = com.google.gson.Gson().toJson(frame)
+        val json = gson.toJson(frame)
         ws.send(json)
     }
 
     private fun handleRawMessage(text: String) {
-        val gson = com.google.gson.Gson()
         val decoded = try { gson.fromJson(text, com.google.gson.JsonElement::class.java) } catch (e: Exception) {
             onLog?.invoke("[relay] bad frame: $e")
             return
@@ -237,7 +257,8 @@ class RelayClient(
                 val payload = obj.get("payload")
                 if (payload?.isJsonObject == true) {
                     val map = gson.fromJson(payload, Map::class.java) as? Map<String, Any>
-                    if (map != null) scope.launch { _payloads.emit(map) }
+                    // 不在这里 launch 协程：直接入队，由单一消费者按序转发
+                    if (map != null) inboundQueue.trySend(map)
                 }
             }
             "error" -> handleRelayError(obj.get("code")?.asString, obj.get("message")?.asString)
@@ -392,6 +413,8 @@ class RelayClient(
         stopHeartbeat()
         clearWaitingTimer()
         reconnectJob?.cancel()
+        inboundQueue.close()
+        inboundDispatcher.cancel()
         webSocket?.close(1000, "disposed")
         _state.value = RelayState.CLOSED
     }

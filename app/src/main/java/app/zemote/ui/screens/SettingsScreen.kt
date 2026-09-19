@@ -71,6 +71,7 @@ fun SettingsScreen(
     onOpenPersonalize: () -> Unit = {},
     onOpenChangelog: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
+    onOpenCacheClean: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -170,32 +171,13 @@ fun SettingsScreen(
 
             SectionLabel(stringResource(R.string.section_cache))
             SettingsCard {
-                Column {
-                    SettingRow(
-                        icon = Icons.Rounded.BugReport,
-                        title = stringResource(R.string.cache_sessions),
-                        subtitle = stringResource(R.string.cache_sessions_sub),
-                        onClick = {
-                            scope.launch {
-                                session?.disconnectAll()
-                                snackbarHostState.showSnackbar(ctx.getString(R.string.cache_cleared))
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                    )
-                    SettingRow(
-                        icon = Icons.Rounded.BugReport,
-                        title = stringResource(R.string.cache_logs),
-                        subtitle = stringResource(R.string.cache_logs_sub),
-                        onClick = {
-                            scope.launch {
-                                ZemoteLogger.clear()
-                                snackbarHostState.showSnackbar(ctx.getString(R.string.cache_cleared))
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                    )
-                }
+                SettingRow(
+                    icon = Icons.Rounded.ClearAll,
+                    title = stringResource(R.string.cache_clean_title),
+                    subtitle = stringResource(R.string.cache_clean_subtitle),
+                    onClick = onOpenCacheClean,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
             }
 
             SectionLabel(stringResource(R.string.section_appearance))

@@ -50,6 +50,8 @@
     <string name="loading_chat">正在加载对话…</string>
     <string name="session_empty">该会话暂无可见消息。\n可以直接在下方输入框发起新话题。</string>
     <string name="opening_session">正在打开会话…</string>
+    <string name="load_older_messages">加载更多历史消息</string>
+    <string name="loading_older_messages">正在加载…</string>
     <string name="cannot_open_chat">无法打开对话</string>
     <string name="device_not_connected_retry">设备未连接，无法打开会话，请返回重试</string>
     <string name="processing">正在处理…</string>
@@ -87,6 +89,7 @@
     <string name="uploading_files">正在上传附件 %1$d/%2$d</string>
     <string name="uploading_progress">正在上传附件 %1$d/%2$d · %3$d%%</string>
     <string name="create_session_failed">创建会话失败</string>
+    <string name="send_rejected">消息未发送：%1$s</string>
     <string name="back">返回</string>
 
     <string name="tool_run">执行了命令</string>
@@ -217,4 +220,23 @@
     <string name="task_running">运行中</string>
     <string name="task_cancel">取消</string>
     <string name="task_no_work">暂无后台任务</string>
+
+    <string name="cache_clean_title">清理缓存</string>
+    <string name="cache_clean_subtitle">选择要清理的缓存数据，释放存储空间</string>
+    <string name="cache_scanning">正在扫描缓存…</string>
+    <string name="cache_cleaning">正在清理…</string>
+    <string name="cache_clean_done">清理完成</string>
+    <string name="cache_clean_done_hint">已释放所选缓存数据</string>
+    <string name="cache_scan_again">重新扫描</string>
+    <string name="cache_clean_now">立即清理</string>
+    <string name="cache_select_all">全选</string>
+    <string name="cache_items_selected">%1$d/%2$d 项已选中</string>
+    <string name="cache_selected_total">共 %1$s 可清理</string>
+    <string name="cache_empty">暂无可清理的缓存数据</string>
+    <string name="cache_app_dir">应用缓存目录</string>
+    <string name="cache_app_dir_sub">应用运行时产生的临时文件（%1$s）</string>
+    <string name="cache_crash_report">崩溃报告</string>
+    <string name="cache_crash_report_sub">上次崩溃的诊断日志（%1$s）</string>
+    <string name="cache_settings">设置数据</string>
+    <string name="cache_settings_sub">本地配置缓存（%1$s）</string>
 </resources>
