@@ -512,61 +512,111 @@ SDK: API 28+ (Android 9.0)<br>
         </footer>
     </div>
 
-    <script>
+        <script>
         const REPO = 'Damianjiang/ZCode-Android';
         let currentSource = 'mirror'; // 默认国内镜像
         
-        // 切换源
-        function switchSource(source) {
-            console.log('[切换源] 从:', currentSource, '切换到:', source);
-            currentSource = source;
-            
-            // 更新按钮状态
-            document.getElementById('btn-mirror').classList.toggle('active', source === 'mirror');
-            document.getElementById('btn-github').classList.toggle('active', source === 'github');
-            
-            // 更新源状态显示（添加动画效果）
-            const sourceText = source === 'mirror' ? '国内镜像 (gh-proxy)' : 'GitHub官方';
-            const sourceEl = document.getElementById('current-source-text');
-            sourceEl.textContent = sourceText;
-            sourceEl.style.color = source === 'mirror' ? '#166534' : '#2563eb';
-            sourceEl.style.fontWeight = 'bold';
-            setTimeout(() => { sourceEl.style.fontWeight = 'normal'; }, 1000);
-            
-            // 显示切换提示
-            console.log('[切换源] 即将重新加载数据...');
-            
-            // 显示切换指示器
-            const indicator = document.getElementById('switch-indicator');
-            indicator.className = 'switch-indicator ' + source;
-            indicator.textContent = '🔄 正在切换到: ' + (source === 'mirror' ? '国内镜像' : 'GitHub官方');
-            setTimeout(() => indicator.classList.add('show'), 10);
-            setTimeout(() => indicator.classList.remove('show'), 2000);
-            
-            // 明显的背景色变化
-            document.body.className = 'source-' + source;
-            
-            // 显示顶部指示条
-            const banner = document.getElementById('source-banner');
-            const bannerText = document.getElementById('banner-text');
-            banner.className = 'source-banner show ' + source;
-            bannerText.textContent = source === 'mirror' ? '🇨🇳 国内镜像 (gh-proxy.com)' : '🌐 GitHub官方 API';
-            
-            // 5秒后隐藏顶部指示条
-            setTimeout(() => banner.classList.remove('show'), 5000);
-            
-            // 重新加载数据
-            fetchLatestRelease();
-            renderVersionHistory();
-        }
+        // 静态版本信息（CSP fallback）
+        const VERSION = 'v1.9.4';
+        const APK_SIZE = '4.17';
+        const STATIC_DOWNLOAD_URL = 'https://github.com/Damianjiang/ZCode-Android/releases/download/' + VERSION + '/app-release.apk';
         
-// 版本历史（静态列表）
+        // 版本历史（静态列表）
         const VERSION_HISTORY = [
             { tag: 'v1.9.4', date: '2026-09-19', desc: '添加源选择功能，支持国内镜像和GitHub官方', url: 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk', size: '4.17' },
             { tag: 'v1.9.3', date: '2026-09-18', desc: '修复PrivacySettings崩溃和CrashScreen布局问题', url: 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.3/app-release.apk', size: '4.15' },
             { tag: 'v1.9.2', date: '2026-09-17', desc: '优化远程控制连接稳定性', url: 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.2/app-release.apk', size: '4.12' },
         ];
-
+        
+        // 获取镜像URL
+        function getMirrorUrl(originalUrl) {
+            if (currentSource === 'mirror' && originalUrl) {
+                return 'https://gh-proxy.com/' + originalUrl;
+            }
+            return originalUrl;
+        }
+        
+        // 使用静态版本fallback
+        function useStaticFallback(message) {
+            console.warn('[Fallback]', message);
+            document.getElementById('latest-version').textContent = VERSION;
+            document.getElementById('download-btn').href = STATIC_DOWNLOAD_URL;
+            document.getElementById('apk-size').textContent = APK_SIZE;
+            document.getElementById('tech-size').textContent = APK_SIZE;
+            document.getElementById('wget-cmd').textContent = 'wget ' + STATIC_DOWNLOAD_URL;
+            
+            // 显示状态
+            document.getElementById('api-status').textContent = '离线模式';
+            document.getElementById('api-status').style.color = '#dc2626';
+            document.getElementById('debug-url').textContent = 'API被阻止，使用本地缓存';
+            document.getElementById('debug-url').style.color = '#dc2626';
+            
+            console.log('[Fallback] 使用静态版本:', VERSION, '-', APK_SIZE, 'MB');
+        }
+        
+        // 初始化页面
+        function initPage() {
+            console.log('[初始化] 尝试从API获取最新版本...');
+            
+            // 尝试API调用
+            fetchLatestRelease().catch(e => {
+                console.warn('[初始化] API失败，使用静态版本:', e.message);
+                useStaticFallback('CSP阻止了API调用');
+            });
+            
+            // 版本历史始终使用静态渲染
+            renderVersionHistory();
+        }
+        
+        // 从API获取最新版本
+        async function fetchLatestRelease() {
+            const api_url = currentSource === 'mirror'
+                ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases/latest'
+                : 'https://api.github.com/repos/' + REPO + '/releases/latest';
+            
+            console.log('[fetchLatestRelease] 当前源:', currentSource);
+            console.log('[fetchLatestRelease] 请求URL:', api_url);
+            
+            // 显示请求URL
+            document.getElementById('debug-url').textContent = '请求: ' + api_url;
+            document.getElementById('debug-url').style.color = '#2563eb';
+            
+            try {
+                const response = await fetch(api_url);
+                const data = await response.json();
+                
+                // 更新版本号
+                document.getElementById('latest-version').textContent = data.tag_name;
+                
+                // 查找APK
+                const apk = data.assets.find(a => a.name.includes('release.apk'));
+                if (apk) {
+                    const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
+                    
+                    // 更新所有下载链接（根据当前源）
+                    const download_url = getMirrorUrl(apk.browser_download_url);
+                    document.getElementById('download-btn').href = download_url;
+                    document.getElementById('apk-size').textContent = sizeMB;
+                    document.getElementById('tech-size').textContent = sizeMB;
+                    document.getElementById('wget-cmd').textContent = 'wget ' + download_url;
+                    
+                    // 显示成功状态
+                    document.getElementById('api-status').textContent = '✓ 成功 (' + (currentSource === 'mirror' ? '国内镜像' : 'GitHub官方') + ')';
+                    document.getElementById('api-status').style.color = '#166534';
+                    document.getElementById('debug-url').textContent = '✓ API调用成功';
+                    document.getElementById('debug-url').style.color = '#166534';
+                    
+                    console.log('[成功] Latest:', data.tag_name, '- Source:', currentSource);
+                } else {
+                    throw new Error('未找到APK文件');
+                }
+            } catch (e) {
+                console.error('Failed to fetch latest release:', e);
+                throw e;
+            }
+        }
+        
+        // 渲染版本历史
         function renderVersionHistory() {
             const container = document.getElementById('version-list-container');
             let html = '<ul class="version-list">';
@@ -581,13 +631,45 @@ SDK: API 28+ (Android 9.0)<br>
             container.innerHTML = html;
         }
         
-        // 页面加载时初始化
-        // 1. 设置版本信息
-        // 2. 渲染版本历史
-        initPage();
-        // 版本历史始终使用静态渲染
-        renderVersionHistory();信息
-
+        // 切换源
+        function switchSource(source) {
+            console.log('[切换源] 从:', currentSource, '切换到:', source);
+            currentSource = source;
+            
+            // 更新按钮状态
+            document.getElementById('btn-mirror').classList.toggle('active', source === 'mirror');
+            document.getElementById('btn-github').classList.toggle('active', source === 'github');
+            
+            // 更新源状态显示
+            const sourceText = source === 'mirror' ? '国内镜像 (gh-proxy)' : 'GitHub官方';
+            const sourceEl = document.getElementById('current-source-text');
+            sourceEl.textContent = sourceText;
+            sourceEl.style.color = source === 'mirror' ? '#166534' : '#2563eb';
+            
+            // 更新顶部指示条
+            const banner = document.getElementById('source-banner');
+            const bannerText = document.getElementById('banner-text');
+            banner.className = 'source-banner show ' + source;
+            bannerText.textContent = source === 'mirror' ? '🇨🇳 国内镜像 (gh-proxy.com)' : '🌐 GitHub官方 API';
+            setTimeout(() => banner.classList.remove('show'), 3000);
+            
+            // 显示切换提示
+            const indicator = document.getElementById('switch-indicator');
+            indicator.className = 'switch-indicator ' + source;
+            indicator.textContent = '🔄 正在切换到: ' + sourceText;
+            setTimeout(() => indicator.classList.add('show'), 10);
+            setTimeout(() => indicator.classList.remove('show'), 2000);
+            
+            // 尝试API调用，失败时使用静态版本
+            console.log('[切换源] 重新加载数据...');
+            fetchLatestRelease().catch(e => {
+                console.warn('[切换源] API失败，使用静态版本:', e.message);
+                useStaticFallback('CSP阻止了切换后的API调用');
+            });
+            
+            // 渲染版本历史（静态）
+            renderVersionHistory();
+        }
         
         // 图片加载动画
         document.querySelectorAll('.screenshot img').forEach(img => {
@@ -604,5 +686,6 @@ SDK: API 28+ (Android 9.0)<br>
         // 页面加载时初始化
         initPage();
     </script>
+
 </body>
 </html>
