@@ -1,7 +1,21 @@
 package app.zemote.protocol
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+
 /**
  * RPC frame transport: logical messages split into frames with CRC32 checksum.
+ *
+ * Outbound: [sendMessage()] takes the full IPC frame body (with or without the
+ *   13-byte framing header — [ChannelClient] includes it), fragments it, and
+ *   sends rpc-frames.
+ *
+ * Inbound:  [acceptPayload()] reassembles fragments, verifies CRC32, and emits
+ *   the complete assembled bytes (13-byte header + encoded value-list) to
+ *   [onMessage]. The caller (ChannelClient.handleMessage) decodes the value-list
+ *   header itself. Do NOT pre-strip the IPC framing header here.
  */
 class RpcFrameTransport(
     val bridgeSessionId: String,
@@ -14,14 +28,19 @@ class RpcFrameTransport(
         const val MAX_FRAGMENT_BYTES = 512 * 1024
         const val MAX_MESSAGE_BYTES = 16 * 1024 * 1024
         const val MAX_FRAGMENTS = 64
-        const val ASSEMBLY_TIMEOUT_MS = 5_000L
     }
 
     private var seq = 0
     private var messageSeq = 0
 
-    private val assemblies = java.util.concurrent.ConcurrentHashMap<Int, Assembly>()
+    private val assemblies = mutableMapOf<Int, Assembly>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Callback fired when a complete, CRC32-verified message is reassembled.
+     * The [frame] is the FULL assembled bytes including the 13-byte IPC framing
+     * header — the caller is responsible for decoding the value-list inside.
+     */
     var onMessage: ((ByteArray) -> Unit)? = null
 
     private val identity: Map<String, Any?>
@@ -31,17 +50,11 @@ class RpcFrameTransport(
             recoveryId?.let { put("recoveryId", it) }
         }
 
-    private fun expireStaleAssemblies() {
-        val now = System.currentTimeMillis()
-        val expired = assemblies.entries.filter { (_, a) ->
-            now - a.lastSeen >= ASSEMBLY_TIMEOUT_MS
-        }.map { it.key }.toList()
-        if (expired.isNotEmpty()) {
-            onLog?.invoke("[rpc] expiring ${expired.size} stale assembly(s)")
-            expired.forEach { assemblies.remove(it) }
-        }
-    }
-
+    /**
+     * Fragments [bytes] into rpc-frames and sends them via [sendPayload].
+     * [bytes] should be the complete IPC message (with 13-byte framing header
+     * if present — [ChannelClient] includes it).
+     */
     fun sendMessage(bytes: ByteArray) {
         if (bytes.isEmpty()) throw IllegalArgumentException("empty message")
         if (bytes.size > MAX_MESSAGE_BYTES) throw IllegalArgumentException("message too large")
@@ -69,6 +82,11 @@ class RpcFrameTransport(
         }
     }
 
+    /**
+     * Receives an incoming rpc-frame payload and assembles fragments.
+     * Emits the complete assembled message (with 13-byte IPC header intact) to
+     * [onMessage] once all fragments arrive and CRC32 checks out.
+     */
     fun acceptPayload(payload: Map<String, Any>): Boolean {
         val type = payload["zcode_type"] as? String ?: return false
         if (type != "rpc-frame" && type != "rpc-frame-ack") return false
@@ -82,6 +100,7 @@ class RpcFrameTransport(
         val checksum = (payload["checksum"] as? Map<*, *>)?.get("value") as? String
 
         if (type == "rpc-frame-ack") {
+            // 服务端 ack 带的是 ackMessageSeq 字段
             val ackSeq = (payload["ackMessageSeq"] as? Number)?.toInt()
                 ?: (payload["messageSeq"] as? Number)?.toInt()
             if (ackSeq != null) assemblies.remove(ackSeq)
@@ -89,30 +108,15 @@ class RpcFrameTransport(
         }
 
         if (dataBase64 == null) return true
-        if (fragIdx < 0 || fragIdx >= fragCount) return true
-
-        val existing = assemblies[msgSeqVal]
-        if (existing != null && existing.count == fragCount && existing.fragments[fragIdx] != null) {
-            return true
-        }
         val chunk = try { android.util.Base64.decode(dataBase64, android.util.Base64.NO_WRAP) } catch (_: Exception) { return true }
 
-        val assembly = if (existing != null && existing.count == fragCount) {
-            existing
-        } else {
-            if (existing != null) assemblies.remove(msgSeqVal)
+        val assembly = assemblies.getOrPut(msgSeqVal) {
             Assembly(crc32 = checksum ?: "", count = fragCount).also { assemblies[msgSeqVal] = it }
-        }
         assembly.fragments[fragIdx] = chunk
-        assembly.received += 1
         assembly.lastSeen = System.currentTimeMillis()
 
-        if (assembly.received == fragCount) {
-            if (msgBytes <= 0 || msgBytes > MAX_MESSAGE_BYTES) {
-                onLog?.invoke("[rpc] bad messageBytes=$msgBytes for msg $msgSeqVal")
-                assemblies.remove(msgSeqVal)
-                return true
-            }
+        if (assembly.fragments.size == fragCount && assembly.fragments.all { it != null }) {
+            // Reassemble into complete message (includes 13-byte IPC header)
             val assembled = ByteArray(msgBytes)
             var offset = 0
             for (i in 0 until fragCount) {
@@ -120,17 +124,18 @@ class RpcFrameTransport(
                 System.arraycopy(frag, 0, assembled, offset, frag.size)
                 offset += frag.size
             }
+            // Verify CRC32
             val actualChecksum = Crc32.hexOf(assembled)
             if (actualChecksum != assembly.crc32) {
                 onLog?.invoke("[rpc] CRC32 mismatch for msg $msgSeqVal (expected=${assembly.crc32} actual=$actualChecksum)")
                 assemblies.remove(msgSeqVal)
                 return true
             }
+            // 收到完整消息后必须 ack，否则服务端会重传并最终判定 rpc-transport-fault
             sendAck(msgSeqVal)
+            // Emit complete assembled message (with framing header) — caller decodes
             onMessage?.invoke(assembled)
             assemblies.remove(msgSeqVal)
-        } else {
-            expireStaleAssemblies()
         }
         return true
     }
@@ -147,9 +152,8 @@ class RpcFrameTransport(
         val crc32: String,
         val count: Int,
         val fragments: Array<ByteArray?> = arrayOfNulls(count),
-        var received: Int = 0,
         var lastSeen: Long = System.currentTimeMillis(),
     )
 
-    fun dispose() { assemblies.clear() }
+    fun dispose() { assemblies.clear(); scope.cancel() }
 }
