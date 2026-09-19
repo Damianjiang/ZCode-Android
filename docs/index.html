@@ -128,11 +128,11 @@
         <div class="hero">
             <div class="hero-badge">
                 <span class="dot"></span>
-                <span>最新版本: v1.9.4</span>
+                <span id="latest-version">加载中...</span>
             </div>
             <h2 style="font-size: 28px; font-weight: 600; color: #5c4033; margin-bottom: 16px;">随时随地的远程桌面控制</h2>
             <p style="color: #8b7355; font-size: 16px; max-width: 600px; margin: 0 auto 32px;">通过Android手机远程控制桌面，支持BigModel/ZCode模型选择，深度思考等级调节，让移动办公更加高效。</p>
-            <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="download-btn" target="_blank">
+            <a href="#" id="download-btn" class="download-btn" target="_blank">
                 <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                 下载 Release APK
             </a>
@@ -276,11 +276,11 @@
         </div>
 
         <!-- CTA -->
-        <div class="cta-section">
-            <h2>立即体验远程控制</h2>
+        <div class="cta-section" id="cta-section">
+            <h2 id="cta-title">立即体验远程控制</h2>
             <p>让你的手机成为强大的远程桌面控制工具</p>
             <a href="https://github.com/Damianjiang/ZCode-Android/releases/latest" class="cta-btn" target="_blank">
-                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg><span id="download-text">下载 Release APK</span>
                 下载 Release APK
             </a>
         </div>
@@ -305,6 +305,47 @@
             document.getElementById('tab-' + name).classList.add('active');
             event.target.classList.add('active');
         }
+    </script>
+
+    <script>
+        async function fetchLatestRelease() {
+            try {
+                const response = await fetch('https://api.github.com/repos/Damianjiang/ZCode-Android/releases/latest');
+                const data = await response.json();
+                
+                // 更新版本号
+                const versionEl = document.getElementById('latest-version');
+                if (versionEl) versionEl.textContent = data.tag_name;
+                
+                // 更新下载按钮链接
+                const downloadBtn = document.getElementById('download-btn');
+                if (downloadBtn && data.assets) {
+                    const apk = data.assets.find(a => a.name.includes('release.apk'));
+                    if (apk) {
+                        downloadBtn.href = apk.browser_download_url;
+                        document.getElementById('download-text').textContent = '下载 ' + apk.name + ' (' + (apk.size / 1024 / 1024).toFixed(2) + ' MB)';
+                    }
+                }
+                
+                // 更新CTA按钮
+                const ctaBtn = document.querySelector('.cta-section a');
+                if (ctaBtn && data.assets) {
+                    const apk = data.assets.find(a => a.name.includes('release.apk'));
+                    if (apk) {
+                        ctaBtn.href = apk.browser_download_url;
+                    }
+                }
+                
+                console.log('Latest version:', data.tag_name);
+            } catch (e) {
+                console.error('Failed to fetch release:', e);
+                const versionEl = document.getElementById('latest-version');
+                if (versionEl) versionEl.textContent = 'v1.9.4';
+            }
+        }
+        
+        // 页面加载时获取最新版本
+        fetchLatestRelease();
     </script>
 </body>
 </html>
