@@ -46,3 +46,6 @@ web-download/app-debug.apk
 promo/
 .workbuddy/
 .workbuddy/
+
+# git filter-branch 临时目录
+.git-rewrite/
