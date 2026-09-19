@@ -4,105 +4,348 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZCode Android - ZCode远程控制客户端</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #faf6f1;
+            --bg-secondary: #f5f0e8;
+            --text-primary: #3d3229;
+            --text-secondary: #6b5c4f;
+            --accent: #8b9d77;
+            --accent-dark: #6b7c5c;
+            --stone: #5c4033;
+            --border: #d4c5b0;
+            --card-bg: #fefcf8;
+        }
+        
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.7;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
         }
-        .container { max-width: 900px; margin: 0 auto; padding: 40px 20px; }
-        .header { text-align: center; color: white; margin-bottom: 50px; }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 60px 24px;
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid var(--border);
+        }
+        
         .logo {
-            width: 80px; height: 80px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 20px;
-            display: flex; align-items: center; justify-content: center;
-            margin: 0 auto 20px; font-size: 36px;
-            backdrop-filter: blur(10px);
+            width: 88px;
+            height: 88px;
+            background: var(--stone);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 40px;
+            box-shadow: 0 4px 20px rgba(92,64,51,0.15);
         }
-        .title { font-size: 42px; font-weight: 700; margin-bottom: 10px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .subtitle { font-size: 18px; opacity: 0.9; }
+        
+        .title {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--stone);
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+        
+        /* Cards */
         .card {
-            background: white; border-radius: 16px; padding: 30px;
-            margin-bottom: 24px; box-shadow: 0 10px 40px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
+            background: var(--card-bg);
+            border-radius: 32px;
+            padding: 40px;
+            margin-bottom: 32px;
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 12px rgba(92,64,51,0.04);
         }
-        .card:hover { transform: translateY(-2px); }
+        
         .card-title {
-            font-size: 20px; font-weight: 600; margin-bottom: 16px;
-            color: #1a1a1a; display: flex; align-items: center; gap: 10px;
+            font-family: 'Noto Serif SC', serif;
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--stone);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
+        
         .card-title::before {
-            content: ''; width: 4px; height: 20px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 2px;
+            content: '';
+            width: 6px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 3px;
         }
+        
+        /* Version Badge */
         .version-badge {
-            display: inline-flex; align-items: center; gap: 8px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white; padding: 8px 16px; border-radius: 20px;
-            font-size: 14px; font-weight: 600; margin-bottom: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--accent);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 100px;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 24px;
         }
+        
         .version-badge .dot {
-            width: 8px; height: 8px; background: #4ade80;
-            border-radius: 50%; animation: pulse 2s infinite;
+            width: 8px;
+            height: 8px;
+            background: #4ade80;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
         }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        /* Download Button */
         .download-btn {
-            display: inline-flex; align-items: center; gap: 10px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white; padding: 16px 32px; border-radius: 12px;
-            text-decoration: none; font-weight: 600; font-size: 16px;
-            transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(102,126,234,0.4);
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--stone);
+            color: white;
+            padding: 18px 36px;
+            border-radius: 100px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 16px;
+            transition: all 0.4s ease;
+            box-shadow: 0 4px 16px rgba(92,64,51,0.2);
         }
-        .download-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.5); }
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px; }
-        .feature-item { display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: #f8f9fa; border-radius: 12px; }
+        
+        .download-btn:hover {
+            background: var(--accent-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(92,64,51,0.25);
+        }
+        
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+        }
+        
+        .feature-item {
+            padding: 24px;
+            background: var(--bg-secondary);
+            border-radius: 24px;
+            border: 1px solid var(--border);
+            transition: all 0.4s ease;
+        }
+        
+        .feature-item:hover {
+            background: white;
+            transform: translateY(-2px);
+        }
+        
         .feature-icon {
-            width: 36px; height: 36px; background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            background: var(--accent);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
         }
-        .feature-text h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-        .feature-text p { font-size: 12px; color: #666; }
+        
+        .feature-icon svg {
+            width: 24px;
+            height: 24px;
+            color: white;
+        }
+        
+        .feature-text h4 {
+            font-family: 'Noto Serif SC', serif;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--stone);
+        }
+        
+        .feature-text p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        /* Code Block */
         .code-block {
-            background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px;
-            font-family: Consolas, Monaco, monospace; font-size: 13px; overflow-x: auto; margin: 8px 0;
+            background: #2a2520;
+            color: #e8e0d5;
+            padding: 20px;
+            border-radius: 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 12px 0;
+            line-height: 1.6;
         }
-        .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        
         .tab {
-            padding: 8px 16px; background: #f0f0f0; border: none; border-radius: 8px;
-            cursor: pointer; font-size: 14px; transition: all 0.2s;
+            padding: 10px 20px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-secondary);
+            transition: all 0.3s ease;
         }
-        .tab.active { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        
+        .tab:hover {
+            border-color: var(--accent);
+            color: var(--accent-dark);
+        }
+        
+        .tab.active {
+            background: var(--stone);
+            border-color: var(--stone);
+            color: white;
+        }
+        
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .info-list { list-style: none; }
-        .info-list li { padding: 12px 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
-        .info-list li:last-child { border-bottom: none; }
-        .info-list .label { color: #666; }
-        .info-list .value { font-weight: 600; color: #333; }
-        .footer { text-align: center; color: rgba(255,255,255,0.8); margin-top: 40px; font-size: 14px; }
-        .footer a { color: white; text-decoration: underline; }
-        @media (max-width: 600px) { .title { font-size: 28px; } .card { padding: 20px; } }
+        
+        /* Info List */
+        .info-list {
+            list-style: none;
+        }
+        
+        .info-list li {
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .info-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .info-list .label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .info-list .value {
+            font-weight: 500;
+            color: var(--stone);
+        }
+        
+        /* Screenshots */
+        .screenshots {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-top: 20px;
+        }
+        
+        .screenshot {
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            aspect-ratio: 9/16;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .screenshot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        .footer a {
+            color: var(--stone);
+            text-decoration: none;
+            border-bottom: 1px solid var(--border);
+            transition: border-color 0.3s;
+        }
+        
+        .footer a:hover {
+            border-color: var(--accent);
+        }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+            .title { font-size: 32px; }
+            .container { padding: 40px 20px; }
+            .card { padding: 28px; }
+            .screenshots { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <div class="logo">📱</div>
             <h1 class="title">ZCode Android</h1>
             <p class="subtitle">ZCode 远程控制客户端 · 协议复刻，独立实现</p>
         </div>
 
+        <!-- Latest Version & Download -->
         <div class="card">
             <div class="version-badge">
                 <span class="dot"></span>
                 <span>最新版本: <strong id="latest-version">加载中...</strong></span>
             </div>
-            <p style="margin-bottom: 20px; color: #666;">
-                安全、快速的 Android 远程桌面控制应用，支持 BigModel / ZCode 模型提供商，深度思考等级调节。
+            <p style="margin-bottom: 24px; color: var(--text-secondary);">
+                安全、快速的 Android 远程桌面控制应用。通过逆向官方 Web 通信协议实现，
+                支持 BigModel / ZCode 模型提供商，深度思考等级调节。
             </p>
             <a href="#" id="download-link" class="download-btn" target="_blank">
                 <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,41 +353,59 @@
                 </svg>
                 下载 APK (<span id="apk-size">--</span> MB)
             </a>
-            <p style="margin-top: 12px; font-size: 12px; color: #999;">
-                Release 版本 · 经过 R8 混淆优化 · arm64-v8a 架构
+            <p style="margin-top: 16px; font-size: 13px; color: var(--text-secondary);">
+                Release 版本 · R8 混淆优化 · arm64-v8a 架构
             </p>
         </div>
 
+        <!-- Screenshots -->
+        <div class="card">
+            <h3 class="card-title">界面预览</h3>
+            <div class="screenshots">
+                <div class="screenshot">
+                    <img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step1_home.png" alt="设备列表" loading="lazy">
+                </div>
+                <div class="screenshot">
+                    <img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step3_add_device.png" alt="扫码添加设备" loading="lazy">
+                </div>
+                <div class="screenshot">
+                    <img src="https://raw.githubusercontent.com/Damianjiang/ZCode-Android/main/screenshots/step4_settings_page.png" alt="设置页面" loading="lazy">
+                </div>
+            </div>
+        </div>
+
+        <!-- Features -->
         <div class="card">
             <h3 class="card-title">功能特性</h3>
             <div class="features-grid">
                 <div class="feature-item">
                     <div class="feature-icon">
-                        <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                     </div>
                     <div class="feature-text"><h4>远程桌面控制</h4><p>WebSocket 实时通信</p></div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-icon">
-                        <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
                     </div>
                     <div class="feature-text"><h4>AI 设置</h4><p>模型/思考等级配置</p></div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-icon">
-                        <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
                     </div>
                     <div class="feature-text"><h4>移动端友好</h4><p>Compose UI 适配</p></div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-icon">
-                        <svg width="18" height="18" fill="none" stroke="white" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
                     </div>
                     <div class="feature-text"><h4>安全可靠</h4><p>安全握手配对</p></div>
                 </div>
             </div>
         </div>
 
+        <!-- Download Methods -->
         <div class="card">
             <h3 class="card-title">下载方式</h3>
             <div class="tabs">
@@ -152,32 +413,33 @@
                 <button class="tab" onclick="showTab('git')">Git Clone</button>
                 <button class="tab" onclick="showTab('wget')">Wget / Curl</button>
             </div>
+
             <div id="tab-web" class="tab-content active">
-                <p style="margin-bottom: 12px; color: #666;">点击上方下载按钮获取 Release APK。</p>
-                <a href="https://github.com/Damianjiang/ZCode-Android/releases" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">→ 访问 GitHub Releases</a>
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">点击上方下载按钮获取 Release APK，或访问 GitHub Releases 页面。</p>
+                <a href="https://github.com/Damianjiang/ZCode-Android/releases" target="_blank" style="color: var(--stone); text-decoration: none; font-weight: 500; border-bottom: 1px solid var(--border);">→ 访问 GitHub Releases</a>
             </div>
+
             <div id="tab-git" class="tab-content">
-                <p style="margin-bottom: 12px; color: #666;">克隆整个项目源码：</p>
-                <div class="code-block"><code>git clone https://github.com/Damianjiang/ZCode-Android.git</code></div>
-                <p style="margin-top: 12px; font-size: 12px; color: #999;">⚠️ 注意：不支持 SSH Key 方式 git clone</p>
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">克隆整个项目源码：</p>
+                <div class="code-block">git clone https://github.com/Damianjiang/ZCode-Android.git</div>
+                <p style="margin-top: 12px; font-size: 13px; color: var(--text-secondary);">⚠️ 注意：不支持 SSH Key 方式 git clone</p>
             </div>
+
             <div id="tab-wget" class="tab-content">
-                <p style="margin-bottom: 12px; color: #666;">使用命令行工具下载 Release APK：</p>
-                <div class="code-block"><code># wget&#10;wget https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk&#10;&#10;# curl&#10;curl -O https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk</code></div>
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">使用命令行工具下载 Release APK：</p>
+                <div class="code-block"># wget<br>wget https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk<br><br># curl<br>curl -O https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk</div>
             </div>
         </div>
 
+        <!-- Version History -->
         <div class="card">
             <h3 class="card-title">版本历史</h3>
-            <ul class="info-list">
-                <li><span class="label">v1.9.4</span><span class="value">Bug修复：PrivacySettings崩溃、CrashScreen布局</span></li>
-                <li><span class="label">v1.9.3</span><span class="value">配置功能迁移：AI设置、反馈工单、隐私设置</span></li>
-                <li><span class="label">v1.9.2</span><span class="value">编译错误修复：ZemoteLogger、Gson导入</span></li>
-                <li><span class="label">v1.9.0</span><span class="value">Chat加载卡住问题修复</span></li>
-                <li><span class="label">v1.8.0</span><span class="value">性能优化：历史加载、渲染速度</span></li>
+            <ul class="info-list" id="version-list">
+                <li><span class="label">加载中...</span></li>
             </ul>
         </div>
 
+        <!-- Requirements -->
         <div class="card">
             <h3 class="card-title">系统要求</h3>
             <ul class="info-list">
@@ -188,37 +450,107 @@
             </ul>
         </div>
 
+        <!-- Footer -->
         <div class="footer">
-            <p>由 <strong>Damian2012</strong> 独立开发 · <a href="https://github.com/Damianjiang/ZCode-Android" target="_blank">GitHub</a> · <a href="https://github.com/Damianjiang/ZCode-Android/issues" target="_blank">反馈问题</a></p>
-            <p style="margin-top: 8px; font-size: 12px; opacity: 0.8;">Zemote · ZCode 远程控制客户端（协议复刻，独立实现）</p>
+            <p>由 <strong>Damian2012</strong> 独立开发</p>
+            <p style="margin-top: 8px;">
+                <a href="https://github.com/Damianjiang/ZCode-Android" target="_blank">GitHub</a> · 
+                <a href="https://github.com/Damianjiang/ZCode-Android/issues" target="_blank">反馈问题</a>
+            </p>
+            <p style="margin-top: 12px; font-size: 12px; opacity: 0.7;">
+                Zemote · ZCode 远程控制客户端（协议复刻，独立实现）
+            </p>
         </div>
     </div>
 
     <script>
-        async function fetchLatestRelease() {
+        const REPO = 'Damianjiang/ZCode-Android';
+        const TOKEN = 'REDACTED';
+        
+        // 自动获取最新版本和版本历史
+        async function fetchGitHubData() {
             try {
-                const response = await fetch('https://api.github.com/repos/Damianjiang/ZCode-Android/releases/latest');
-                const data = await response.json();
-                document.getElementById('latest-version').textContent = data.tag_name;
-                const apk = data.assets.find(a => a.name.includes('release.apk'));
+                // 获取最新Release
+                const releaseRes = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+                    headers: { 'Authorization': `token ${TOKEN}`, 'Accept': 'application/json' }
+                });
+                const release = await releaseRes.json();
+                
+                // 更新最新版本显示
+                document.getElementById('latest-version').textContent = release.tag_name;
+                const apk = release.assets.find(a => a.name.includes('release.apk'));
                 if (apk) {
                     document.getElementById('download-link').href = apk.browser_download_url;
                     document.getElementById('apk-size').textContent = (apk.size / 1024 / 1024).toFixed(2);
                 }
+                
+                // 更新wget/curl链接
+                updateDownloadCommands(release.tag_name, apk?.browser_download_url || '');
+                
             } catch (e) {
-                console.error('Failed:', e);
-                document.getElementById('latest-version').textContent = 'v1.9.4';
-                document.getElementById('download-link').href = 'https://github.com/Damianjiang/ZCode-Android/releases/tag/v1.9.4';
-                document.getElementById('apk-size').textContent = '4.17';
+                console.error('Failed to fetch release:', e);
+            }
+            
+            try {
+                // 获取所有Tags作为版本历史
+                const tagsRes = await fetch(`https://api.github.com/repos/${REPO}/tags`, {
+                    headers: { 'Authorization': `token ${TOKEN}`, 'Accept': 'application/json' }
+                });
+                const tags = await tagsRes.json();
+                
+                // 获取每个release的说明
+                const versionList = document.getElementById('version-list');
+                versionList.innerHTML = '';
+                
+                const limit = Math.min(10, tags.length);
+                for (let i = 0; i < limit; i++) {
+                    const tag = tags[i];
+                    
+                    // 获取该tag对应的release说明
+                    let note = '功能更新';
+                    try {
+                        const releaseRes = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${tag.name}`, {
+                            headers: { 'Authorization': `token ${TOKEN}`, 'Accept': 'application/json' }
+                        });
+                        const releaseData = await releaseRes.json();
+                        if (releaseData.body) {
+                            // 提取第一行作为简要说明
+                            note = releaseData.body.split('\n')[1]?.trim() || '功能更新';
+                            // 清理markdown格式
+                            note = note.replace(/[#*`\-]/g, '').trim();
+                        }
+                    } catch(e) {}
+                    
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span class="label">${tag.name}</span><span class="value">${note || '功能更新'}</span>`;
+                    versionList.appendChild(li);
+                }
+                
+            } catch (e) {
+                console.error('Failed to fetch tags:', e);
             }
         }
+        
+        function updateDownloadCommands(version, apkUrl) {
+            const wgetCmd = `wget https://github.com/${REPO}/releases/download/${version}/app-release.apk`;
+            const curlCmd = `curl -O https://github.com/${REPO}/releases/download/${version}/app-release.apk`;
+            
+            const wgetTab = document.querySelector('#tab-wget .code-block');
+            if (wgetTab) {
+                wgetTab.innerHTML = `# wget<br>${wgetCmd}<br><br># curl<br>${curlCmd}`;
+            }
+        }
+        
+        // Tab切换
         function showTab(name) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + name).classList.add('active');
             event.target.classList.add('active');
         }
-        fetchLatestRelease();
+        
+        // 页面加载时获取数据
+        fetchGitHubData();
     </script>
 </body>
 </html>
