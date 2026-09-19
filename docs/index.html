@@ -433,14 +433,42 @@ SDK: API 28+ (Android 9.0)<br>
     </div>
 
 
-    <script>
+        <script>
         const REPO = 'Damianjiang/ZCode-Android';
+        let currentSource = 'mirror'; // 默认国内镜像
+        
+        // 切换源
+        function switchSource(source) {
+            currentSource = source;
+            
+            // 更新按钮状态
+            document.getElementById('btn-mirror').classList.toggle('active', source === 'mirror');
+            document.getElementById('btn-github').classList.toggle('active', source === 'github');
+            
+            // 重新加载数据
+            fetchLatestRelease();
+            fetchAllVersions();
+        }
+        
+        // 获取镜像URL（国内加速）
+        function getMirrorUrl(originalUrl) {
+            if (currentSource === 'mirror' && originalUrl) {
+                return 'https://gh-proxy.com/' + originalUrl;
+            }
+            return originalUrl;
+        }
         
         // 显示所有版本
         async function fetchAllVersions() {
             const container = document.getElementById('version-list-container');
+            container.innerHTML = '<p style="color: #999;">加载中...</p>';
+            
             try {
-                const response = await fetch('https://api.github.com/repos/' + REPO + '/releases');
+                const api_url = currentSource === 'mirror' 
+                    ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases'
+                    : 'https://api.github.com/repos/' + REPO + '/releases';
+                    
+                const response = await fetch(api_url);
                 const data = await response.json();
                 
                 if (!data || data.length === 0) {
@@ -459,7 +487,8 @@ SDK: API 28+ (Android 9.0)<br>
                     html += '<div class="version-tag">' + release.tag_name + '<span class="version-date">' + date + '</span></div>';
                     html += '<div class="version-desc">' + body + '</div>';
                     if (apk) {
-                        html += '<a href="' + apk.browser_download_url + '" class="version-download" target="_blank">下载 APK (' + sizeMB + ' MB)</a>';
+                        const download_url = getMirrorUrl(apk.browser_download_url);
+                        html += '<a href="' + download_url + '" class="version-download" target="_blank">下载 APK (' + sizeMB + ' MB)</a>';
                     }
                     html += '</li>';
                 });
@@ -475,41 +504,38 @@ SDK: API 28+ (Android 9.0)<br>
         // 页面加载时获取最新版本信息
         async function fetchLatestRelease() {
             try {
-                const response = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest');
+                const api_url = currentSource === 'mirror'
+                    ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases/latest'
+                    : 'https://api.github.com/repos/' + REPO + '/releases/latest';
+                    
+                const response = await fetch(api_url);
                 const data = await response.json();
                 
-                // 更新版本号
                 document.getElementById('latest-version').textContent = data.tag_name;
                 
-                // 查找APK
                 const apk = data.assets.find(a => a.name.includes('release.apk'));
                 if (apk) {
                     const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
+                    const download_url = getMirrorUrl(apk.browser_download_url);
                     
-                    // 更新所有下载链接
-                    document.getElementById('download-btn').href = apk.browser_download_url;
+                    document.getElementById('download-btn').href = download_url;
                     document.getElementById('apk-size').textContent = sizeMB;
                     document.getElementById('tech-size').textContent = sizeMB;
-                    document.getElementById('download-text').textContent = '下载 ' + apk.name;
+                    document.getElementById('wget-cmd').textContent = 'wget ' + download_url;
                     
-                    // 更新wget命令
-                    document.getElementById('wget-cmd').textContent = 'wget ' + apk.browser_download_url;
-                    
-                    console.log('Latest release:', data.tag_name, apk.name);
-                } else {
-                    console.warn('No APK found in release assets');
+                    console.log('Latest:', data.tag_name, '- Source:', currentSource);
                 }
             } catch (e) {
                 console.error('Failed to fetch latest release:', e);
-                // 使用硬编码版本作为fallback
                 document.getElementById('latest-version').textContent = 'v1.9.4';
-                document.getElementById('download-btn').href = 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+                const fallback_url = currentSource === 'mirror'
+                    ? 'https://gh-proxy.com/https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk'
+                    : 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+                document.getElementById('download-btn').href = fallback_url;
                 document.getElementById('apk-size').textContent = '4.17';
                 document.getElementById('tech-size').textContent = '4.17';
-                document.getElementById('download-text').textContent = '下载 APK (4.17 MB)';
-                document.getElementById('wget-cmd').textContent = 'wget https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+                document.getElementById('wget-cmd').textContent = 'wget ' + fallback_url;
                 
-                // 显示网络错误提示
                 document.getElementById('download-meta').innerHTML = 'Release版本 · R8混淆优化 · arm64-v8a架构 · <span style="color: #dc2626;">网络连接异常，使用缓存版本</span>';
             }
         }
@@ -519,11 +545,9 @@ SDK: API 28+ (Android 9.0)<br>
             if (img.complete) {
                 img.classList.add('loaded');
             } else {
-                img.addEventListener('load', function() {
-                    this.classList.add('loaded');
-                });
-                img.addEventListener('error', function() {
-                    this.parentElement.innerHTML = '<div class="loading-placeholder">📷</div>';
+                img.addEventListener('load', () => img.classList.add('loaded'));
+                img.addEventListener('error', () => {
+                    img.parentElement.innerHTML = '<div class="loading-placeholder">📷</div>';
                 });
             }
         });
