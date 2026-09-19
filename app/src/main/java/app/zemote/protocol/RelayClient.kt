@@ -14,17 +14,12 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
 
-/** Connection state of the relay WebSocket. */
 enum class RelayState {
     IDLE, CONNECTING, AUTHENTICATING, WAITING, PAIRED, RECONNECTING, ERROR, KICKED, CLOSED
 }
 
 class RelayFailure(val reason: String, override val message: String? = null) : Exception("$reason${message?.let { ": $it" } ?: ""}")
 
-/**
- * Reimplementation of the relay terminal socket (mirrors `pen` class in web client).
- * JSON text frames over wss://<host>/ws.
- */
 class RelayClient(
     private val params: ZemoteConnectionParams,
     private val onLog: ((String) -> Unit)? = null,
@@ -35,8 +30,6 @@ class RelayClient(
         const val WAITING_TIMEOUT_MS = 30_000L
         const val RECONNECT_WAIT_TIMEOUT_MS = 20_000L
         const val DEAD_LINK_THRESHOLD_MS = 25_000L
-        /** Cached Gson — creating a new instance per message is expensive. */
-        private val gson = com.google.gson.Gson()
     }
 
     private val _state = MutableStateFlow(RelayState.IDLE)
@@ -50,8 +43,8 @@ class RelayClient(
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)   // 空闲 30s 无数据视为死链，触发 re-poke
-        .writeTimeout(10, TimeUnit.SECONDS)  // 写超时防止队列堆积
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
     private var webSocket: WebSocket? = null
@@ -67,7 +60,6 @@ class RelayClient(
     private var lastInboundAt = System.currentTimeMillis()
     private var lastPairStatusAckAt = System.currentTimeMillis()
 
-    /** Outbound queue: payloads queued while unpaired; flushed once paired. */
     private val outboundQueue = mutableListOf<Map<String, Any>>()
 
     private var heartbeatJob: Job? = null
@@ -76,17 +68,6 @@ class RelayClient(
     private var rewaitJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * 入站 payload 的**单一消费者**队列。
-     *
-     * 旧实现是 `scope.launch { _payloads.emit(map) }`——每收到一个 rpc-frame 就新建一个协程。
-     * 流式输出时帧率很高，而 `MutableSharedFlow.emit` 在订阅者跟不上时会挂起，
-     * 于是协程不断堆积、帧的投递延迟越拉越大（表现就是"bridge 取信息很慢"），
-     * 而且跨协程投递无法保证顺序（分片重组的 messageSeq 会乱序）。
-     *
-     * 改成：WebSocket 回调只做 trySend（无锁、不阻塞 OkHttp 读线程），
-     * 由下面这一个常驻协程按到达顺序转发到 SharedFlow。队列无界 → 不丢帧、不堆积协程。
-     */
     private val inboundQueue = Channel<Map<String, Any>>(Channel.UNLIMITED)
     private val inboundDispatcher: Job = scope.launch {
         for (payload in inboundQueue) {
@@ -94,9 +75,6 @@ class RelayClient(
         }
     }
 
-    /**
-     * Sends a relay payload. If not yet PAIRED, queues it (up to 100).
-     */
     fun send(payload: Map<String, Any>) {
         if (_state.value != RelayState.PAIRED || webSocket == null) {
             if (outboundQueue.size < 100) {
@@ -112,10 +90,6 @@ class RelayClient(
         ))
     }
 
-    /**
-     * Called when the app returns from background. Checks for stale links and
-     * probes the relay.
-     */
     fun poke() {
         if (disposed || intentionallyClosed) return
         if (_state.value == RelayState.PAIRED) {
@@ -257,7 +231,6 @@ class RelayClient(
                 val payload = obj.get("payload")
                 if (payload?.isJsonObject == true) {
                     val map = gson.fromJson(payload, Map::class.java) as? Map<String, Any>
-                    // 不在这里 launch 协程：直接入队，由单一消费者按序转发
                     if (map != null) inboundQueue.trySend(map)
                 }
             }
@@ -303,8 +276,6 @@ class RelayClient(
     private fun handleRelayError(code: String?, message: String?) {
         onLog?.invoke("[relay] error: $code $message")
         if (code == "KICKED") {
-            // 单查看者模型：被踢说明有其他客户端（如官方网页）占用了会话，桌面端"谁后连谁持有"。
-            // 立即抢回：短间隔持续重连（1s/2s/4s/8s 封顶），直到抢回或应用退出，不再"两次失败永久下线"。
             if (disposed) return
             kickRecoveryAttempted++
             scope.launch { _failures.emit(RelayFailure("session-conflict", message)) }
@@ -327,7 +298,6 @@ class RelayClient(
                 delay(HEARTBEAT_INTERVAL_MS)
                 if (_state.value !in listOf(RelayState.PAIRED, RelayState.WAITING)) continue
                 heartbeatTick++
-                // In WAITING state, only probe on even ticks
                 if (_state.value == RelayState.WAITING && heartbeatTick % 2 == 1) continue
                 if (System.currentTimeMillis() - lastPairStatusAckAt > HEARTBEAT_ACK_TIMEOUT_MS) {
                     if (!staleProbeSent) {
@@ -420,7 +390,6 @@ class RelayClient(
     }
 }
 
-/** Close-code mapping, mirrors `VC()` / `BC` in the web client. */
 fun relayCloseReason(code: Int): String? = when (code) {
     4004 -> "session-not-found"
     4009 -> "session-conflict"

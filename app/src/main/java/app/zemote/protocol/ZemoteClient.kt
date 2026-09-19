@@ -11,10 +11,6 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeoutException
 
-/**
- * High-level facade replicating the web client's otn() flow.
- * relay connect -> pair -> bootstrap -> workspace-bridge -> channel RPC.
- */
 class ZemoteClient(
     val params: ZemoteConnectionParams,
     val onLog: ((String) -> Unit)? = null,
@@ -34,17 +30,10 @@ class ZemoteClient(
     private val pendingMatchers = ConcurrentHashMap<String, (Map<String, Any>) -> Boolean>()
     private val pendingCompleters = ConcurrentHashMap<String, CompletableDeferred<Map<String, Any>>>()
     private var bridgeGeneration = 0
-    /** Track which bridges are actively recovering to avoid concurrent reopen attempts. */
     private val recoveringBridges = ConcurrentHashMap<String, Boolean>()
 
     companion object {
-        /**
-         * Timeout for bridge operations (open/reopen). Mirrors the web client's
-         * bridge timeout. Increased from 30s to 60s for large workspaces with
-         * heavy conversation history to reduce premature timeouts.
-         */
         const val BRIDGE_OP_TIMEOUT_MS = 60_000L
-        /** Retry delays for bridge reopen, mirroring web client's ETe=[250,1e3,3e3]. */
         private val BRIDGE_REOPEN_DELAYS = listOf(250L, 1000L, 3000L)
     }
 
@@ -53,9 +42,6 @@ class ZemoteClient(
         relay.start()
     }
 
-    /**
-     * Waits until the relay reports `matched` (paired with the desktop).
-     */
     suspend fun waitPaired(timeoutMs: Long = 60_000L) {
         if (_state.value == ZemoteClientState.PAIRED) return
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -72,10 +58,6 @@ class ZemoteClient(
         throw TimeoutException("pairing timeout")
     }
 
-    /**
-     * Opens a workspace bridge. Mirrors the web client's `openBridge()` flow.
-     * Returns a [BridgeSession] that owns the rpc-frame transport + IPC channel stack.
-     */
     suspend fun openBridge(workspaceKey: String, taskId: String? = null): BridgeSession {
         val bridgeSessionId = generateRequestId("bridge")
         val generation = ++bridgeGeneration
@@ -113,11 +95,6 @@ class ZemoteClient(
         return session
     }
 
-    /**
-     * Sends a request over relay payloads and waits for the matching response.
-     * Mirrors the web client's `k()` helper: every pending matcher is tested
-     * against every payload; responses are NOT guaranteed to echo our requestId.
-     */
     private suspend fun request(
         payload: Map<String, Any>,
         timeoutMs: Long = 30_000L,
@@ -136,7 +113,6 @@ class ZemoteClient(
         }
     }
 
-    /** bootstrap-request -> bootstrap-response (workspaces overview). */
     suspend fun bootstrap(): Map<String, Any> {
         val id = generateRequestId("bootstrap")
         val res = request(mapOf("zcode_type" to "bootstrap-request", "requestId" to id), match = { p ->
@@ -145,7 +121,6 @@ class ZemoteClient(
         return (res["result"] as? Map<String, Any>) ?: res
     }
 
-    /** workspace-list-request -> workspace-list-response. */
     suspend fun listWorkspaces(): Any? {
         val id = generateRequestId("workspace-list")
         val res = request(mapOf("zcode_type" to "workspace-list-request", "requestId" to id), match = { p ->
@@ -154,7 +129,6 @@ class ZemoteClient(
         return res["result"]
     }
 
-    /** workspace-reconnect-request -> workspace-reconnect-response. */
     suspend fun reconnectWorkspace(workspaceKey: String): Map<String, Any> {
         val id = generateRequestId("workspace-reconnect")
         return request(mapOf(
@@ -167,12 +141,6 @@ class ZemoteClient(
         }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
     }
 
-    /**
-     * Reopens a degraded/dead bridge: new `workspace-bridge-open` (fresh
-     * bridgeSessionId, bumped generation, carries recoveryId), then swaps
-     * the stack into the existing [BridgeSession].
-     * Mirrors the web client's `reopenBridge()` with exponential backoff retries.
-     */
     private suspend fun reopenBridge(session: BridgeSession, retryAttempt: Int = 0) {
         val oldBridge = session.bridge
         val bridgeSessionId = generateRequestId("bridge")
@@ -196,7 +164,6 @@ class ZemoteClient(
         }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
         if (response["zcode_type"] == "workspace-bridge-error") {
             val errorMsg = response["error"] as? String ?: "unknown"
-            // If we have retries left, wait and retry
             if (retryAttempt < BRIDGE_REOPEN_DELAYS.size) {
                 val delayMs = BRIDGE_REOPEN_DELAYS[retryAttempt]
                 onLog?.invoke("[bridge] reopen error: $errorMsg, retrying in ${delayMs}ms")
@@ -214,7 +181,6 @@ class ZemoteClient(
 
     fun pokeRelay() { relay.poke() }
 
-    /** mobile-view-state-update (mirrors `N()` in the web client). */
     fun sendMobileViewState(workspaceKey: String, taskId: String? = null) {
         val viewState = linkedMapOf<String, Any?>()
         viewState["activeWorkspaceKey"] = workspaceKey
@@ -235,12 +201,6 @@ class ZemoteClient(
     }
 
     init {
-        // Collect relay payloads and dispatch to matchers + bridge sessions.
-        // This is the single dispatcher -- BridgeSessions listen directly for
-        // rpc-frame messages to avoid duplication.
-        // buffer(UNLIMITED): same as BridgeSession, prevents this subscriber's
-        // processing time from backpressuring relay's SharedFlow
-        // (extraBufferCapacity=256, default SUSPEND) and slowing the whole inbound pipeline.
         relayScope.launch {
             relay.payloads
                 .buffer(kotlinx.coroutines.channels.Channel.UNLIMITED)
@@ -248,9 +208,6 @@ class ZemoteClient(
                     dispatchPayload(payload)
                 }
         }
-        // Relay layer state sync: after disconnect/preempt then re-pair success,
-        // restore client state and rebuild all workspace bridges
-        // (server-side bridges are invalidated with the disconnect).
         relayScope.launch {
             var hasBeenPaired = false
             relay.state.collect { st ->
@@ -292,13 +249,9 @@ class ZemoteClient(
                 return
             }
             "rpc-frame", "rpc-frame-ack" -> {
-                // Each BridgeSession has its own relay.payloads collector that
-                // routes frames to its transport. Nothing to do here.
                 return
             }
         }
-        // Fallback: pending matcher logic (mirrors the web client's `k()` helper)
-        // Every pending matcher is tested against every payload.
         val done = mutableListOf<String>()
         pendingMatchers.forEach { (reqId, matcher) ->
             val completer = pendingCompleters[reqId]
@@ -313,18 +266,10 @@ class ZemoteClient(
         }
     }
 
-    /**
-     * Bridge recovery: aligns with official flow -- directly uses workspace-bridge-open
-     * to rebuild the bridge. Official source (P=async(e,t)=>...) does not distinguish
-     * reconnect and reopen, unified through workspace-bridge-open + recoveryId.
-     * Added: skip already-recovering bridges to prevent concurrent reopen attempts.
-     */
     private suspend fun recoverActiveBridges() {
         onLog?.invoke("[bridge] recovering ${activeBridges.size} bridge(s)")
         for (session in activeBridges.values.toList()) {
-            // Skip if already recovering to prevent concurrent reopen attempts
             if (session.isRecovering) continue
-            // Skip if already being disposed
             if (session.isDisposed) continue
             session.isRecovering = true
             recoveringBridges[session.bridgeSessionId] = true

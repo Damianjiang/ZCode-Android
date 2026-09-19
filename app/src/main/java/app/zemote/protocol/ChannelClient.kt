@@ -1,6 +1,5 @@
 package app.zemote.protocol
 
-import app.zemote.ui.logger.ZemoteLogger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,18 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Channel RPC client mirroring the web client's Pne.
- *
- * 移动 relay 上的 rpc-frame 携带的是裸 value-list（不带 IPC framing 头）——
- * 已由 .proto_exp.py 裸 socket 实验证实：带 13 字节头的消息会被桌面端静默丢弃。
- *
- * Request: encodeValue([reqType, reqId, channelName, name], args) →
- *   sendBody() → RpcFrameTransport.sendMessage() → rpc-frame
- *
- * Response: rpc-frames → RpcFrameTransport reassemble → handleMessage 解码
- *   value-list → 按 reqId 匹配 completer。
- */
 class ChannelClient(
     private val sendBody: (ByteArray) -> Unit,
     private val onLog: ((String) -> Unit)? = null,
@@ -47,27 +34,13 @@ class ChannelClient(
         ZCODE_AGENT("zcode-agent"), ZCODE_SESSION("zcode-session"), ZCODE_TASK("zcode-task"),
     }
 
-    /**
-     * 请求 ID 生成器。
-     * 必须是原子的：`call()` 与 `addEventListener()` 会从不同线程并发取号，
-     * 旧实现用普通 `var` 自增，撞号时后写的 completer 会覆盖前一个，
-     * 前一个请求就永远等不到应答 → 30s 超时（表现是"bridge 请求又慢又爱失败"）。
-     */
     private val requestIdSeq = java.util.concurrent.atomic.AtomicInteger(0)
 
     private fun nextRequestId(): Int = requestIdSeq.getAndIncrement()
 
-    /**
-     * 桌面端通道就绪信号。
-     * 用 volatile boolean 而非 CompletableDeferred，确保协程取消不会破坏"已初始化"状态。
-     * 任何 call / addEventListener 都会自旋等待它，不依赖外部协程生命周期。
-     */
     @JvmField
     var initialized = false
 
-    /**
-     * 桥接重连后重置就绪信号。
-     */
     fun resetReady() {
         initialized = false
     }
@@ -76,11 +49,6 @@ class ChannelClient(
     private val eventHandlers = ConcurrentHashMap<Int, (Any?) -> Unit>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /**
-     * Called by [RpcFrameTransport.onMessage] with the assembled RAW value-list
-     * (no framing header). Decodes the header to extract type, request id, and
-     * payload data.
-     */
     internal fun handleMessage(frame: ByteArray) {
         try {
             val reader = ValueReader(frame)
@@ -100,7 +68,6 @@ class ChannelClient(
                     promiseHandlers.remove(id)?.complete(Pair(type, data))
                 }
                 RES_EVENT_FIRE -> {
-                    // EventFire: data 是 [eventFrame] 列表（热路径，不做日志）
                     eventHandlers[id]?.invoke(data)
                 }
             }
@@ -109,20 +76,12 @@ class ChannelClient(
         }
     }
 
-    /**
-     * Sends a request over [channel].[method] with [args] and returns the result.
-     * Encodes the raw value-list and sends via [sendBody]（rpc-frame 化在
-     * transport 内完成）。发送前必须等桌面端的 Initialize 帧：先于它发出的
-     * 请求会被静默丢弃（对齐官方 Pne 的 ready 门控）。
-     */
     private suspend fun awaitReady(
         timeoutMs: Long = 30_000L,
         isActiveCheck: () -> Boolean = { scope.isActive },
     ) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (!initialized) {
-            // 必须在 delay 之前检查，否则 delay(50) 会抛出 CancellationException
-            // isActiveCheck 默认检查 ChannelClient 自己的 scope，调用方可传入 sessionScope.isActive
             if (!isActiveCheck()) return
             if (!scope.isActive) return
             if (System.currentTimeMillis() >= deadline) {
@@ -148,11 +107,7 @@ class ChannelClient(
         encodeValue(writer, listOf(REQ_PROMISE, id, channel.channelName, method))
         encodeValue(writer, args)
         sendBody(writer.toByteArray())
-        // 日志开关关闭时连字符串都不拼（每次 RPC 两条日志，热路径上白建字符串+格式化时间）
         if (ZemoteLogger.enabled) ZemoteLogger.debug("ipc", "→ ${channel.channelName}.$method id=$id")
-        // 在 await 前再次检查，防止 scope 在此窗口期内被取消
-        // （LeftCompositionCancellationException 不是 CancellationException 子类，
-        //  不会被上一个 catch 捕获，会走到 Exception catch 抛出 TimeoutException）
         if (!isActiveCheck()) {
             promiseHandlers.remove(id)
             return null
@@ -160,14 +115,11 @@ class ChannelClient(
         val (resType, data) = try {
             kotlinx.coroutines.withTimeout(timeoutMs) { completer.await() }
         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
-            // 协程被取消（页面离开等）时必须原样上抛，不能吞成超时
             promiseHandlers.remove(id)
             throw e
         } catch (e: Exception) {
             promiseHandlers.remove(id)
-            // LeftCompositionCancellationException 是 internal 类，通过消息匹配识别
             if (e.message?.contains("composition") == true) {
-                // Compose 导航离开，静默处理
                 return null
             }
             onLog?.invoke("[ipc] ${channel.channelName}.$method failed (id=$id): ${e.message}")
@@ -181,10 +133,6 @@ class ChannelClient(
         }
     }
 
-    /**
-     * Registers an event listener for [event] on [channel].
-     * Returns a cancel function that unsubscribes.
-     */
     fun addEventListener(
         channel: Channel,
         event: String,
@@ -192,17 +140,13 @@ class ChannelClient(
         arg: Any? = null,
     ): () -> Unit {
         val id = nextRequestId()
-        // sent：LISTEN 是否已真正发出（决定注销时是否需要发 DISPOSE）
-        // disposed：是否已被调用方注销（防止 LISTEN 在注销之后才发出去）
         val sent = AtomicBoolean(false)
         val disposed = AtomicBoolean(false)
         eventHandlers[id] = onEvent
-        // 等桌面端 Initialize 到达后再发注册请求（先发的注册会被静默丢弃）
         scope.launch {
             try {
                 awaitReady(30_000L)
             } catch (_: Exception) {
-                // awaitReady 超时：移除注册的 handler，避免事件处理器泄漏
                 eventHandlers.remove(id)
                 return@launch
             }
@@ -218,10 +162,8 @@ class ChannelClient(
             sendBody(writer.toByteArray())
         }
         return {
-            // 幂等：重复调用只生效一次
             if (disposed.compareAndSet(false, true)) {
                 eventHandlers.remove(id)
-                // 只有 LISTEN 真的发出去过，才需要通知桌面端注销
                 if (sent.get()) {
                     val writer = ValueWriter()
                     encodeValue(writer, listOf(REQ_EVENT_DISPOSE, id, channel.channelName, event))
