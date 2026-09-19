@@ -155,7 +155,44 @@
             .screenshots { grid-template-columns: 1fr; }
             .features { grid-template-columns: 1fr; }
         }
-    </style>
+    
+        /* Image Loading Animation */
+        .screenshot { 
+            border-radius: 8px; 
+            overflow: hidden; 
+            border: 1px solid #e5e7eb;
+            aspect-ratio: 9/16;
+            position: relative;
+            background: #f3f4f6;
+        }
+        .screenshot img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .screenshot img.loaded {
+            opacity: 1;
+        }
+        .screenshot .loading-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+</style>
 </head>
 <body>
     <div class="container">
@@ -312,5 +349,20 @@ SDK: API 28+ (Android 9.0)<br>
         
         fetchLatestRelease();
     </script>
+
+        // 图片加载动画
+        document.querySelectorAll('.screenshot img').forEach(img => {
+            if (img.complete) {
+                img.classList.add('loaded');
+            } else {
+                img.addEventListener('load', function() {
+                    this.classList.add('loaded');
+                });
+                img.addEventListener('error', function() {
+                    // 加载失败时显示占位符
+                    this.parentElement.innerHTML = '<div class="loading-placeholder">📷</div>';
+                });
+            }
+        });
 </body>
 </html>
