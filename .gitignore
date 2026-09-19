@@ -49,3 +49,6 @@ promo/
 
 # git filter-branch 临时目录
 .git-rewrite/
+
+# git filter-branch 临时目录
+.git-rewrite/
