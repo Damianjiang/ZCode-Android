@@ -183,7 +183,62 @@
             .screenshots { grid-template-columns: 1fr; }
             .features { grid-template-columns: 1fr; }
         }
-    </style>
+    
+        /* Version History */
+        .version-list {
+            list-style: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .version-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .version-list li:last-child {
+            border-bottom: none;
+        }
+        .version-tag {
+            font-weight: 600;
+            color: #5c4033;
+            margin-bottom: 4px;
+        }
+        .version-date {
+            font-size: 12px;
+            color: #999;
+            margin-left: 8px;
+        }
+        .version-desc {
+            font-size: 14px;
+            color: #666;
+            margin: 4px 0;
+        }
+        .version-download {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #166534;
+            text-decoration: none;
+            margin-top: 4px;
+        }
+        .version-download:hover {
+            background: #dcfce7;
+        }
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px;
+            color: #991b1b;
+            font-size: 14px;
+        }
+        .error-message a {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+</style>
 </head>
 <body>
     <div class="container">
@@ -294,6 +349,17 @@ SDK: API 28+ (Android 9.0)<br>
             </div>
         </div>
 
+
+        <!-- Version History -->
+        <div class="card" id="version-history-section">
+            <h2>版本历史</h2>
+            <p style="font-size: 14px; color: #888; margin-bottom: 16px;">
+                <a href="#" id="show-all-versions" onclick="fetchAllVersions(); return false;">查看所有版本</a>
+            </p>
+            <div id="version-list-container">
+                <p style="color: #999; font-size: 14px;">加载中...</p>
+            </div>
+        </div>
         <!-- Footer -->
         <footer>
             <p>由 <strong>Damian2012</strong> 开发</p>
@@ -306,7 +372,88 @@ SDK: API 28+ (Android 9.0)<br>
         </footer>
     </div>
 
+
     <script>
+        const REPO = 'Damianjiang/ZCode-Android';
+        
+        // 显示所有版本
+        async function fetchAllVersions() {
+            const container = document.getElementById('version-list-container');
+            try {
+                const response = await fetch('https://api.github.com/repos/' + REPO + '/releases');
+                const data = await response.json();
+                
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<p style="color: #999;">暂无版本信息</p>';
+                    return;
+                }
+                
+                let html = '<ul class="version-list">';
+                data.forEach(release => {
+                    const date = new Date(release.published_at).toLocaleDateString('zh-CN');
+                    const body = release.body ? release.body.substring(0, 100) + '...' : '暂无更新说明';
+                    const apk = release.assets.find(a => a.name.includes('release.apk'));
+                    const sizeMB = apk ? (apk.size / 1024 / 1024).toFixed(2) : '--';
+                    
+                    html += '<li>';
+                    html += '<div class="version-tag">' + release.tag_name + '<span class="version-date">' + date + '</span></div>';
+                    html += '<div class="version-desc">' + body + '</div>';
+                    if (apk) {
+                        html += '<a href="' + apk.browser_download_url + '" class="version-download" target="_blank">下载 APK (' + sizeMB + ' MB)</a>';
+                    }
+                    html += '</li>';
+                });
+                html += '</ul>';
+                
+                container.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to fetch versions:', e);
+                container.innerHTML = '<div class="error-message">⚠️ 网络问题，无法加载版本列表<br><a href="https://github.com/' + REPO + '/releases" target="_blank">前往 GitHub Releases 查看历史版本</a></div>';
+            }
+        }
+        
+        // 页面加载时获取最新版本信息
+        async function fetchLatestRelease() {
+            try {
+                const response = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest');
+                const data = await response.json();
+                
+                // 更新版本号
+                document.getElementById('latest-version').textContent = data.tag_name;
+                
+                // 查找APK
+                const apk = data.assets.find(a => a.name.includes('release.apk'));
+                if (apk) {
+                    const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
+                    
+                    // 更新所有下载链接
+                    document.getElementById('download-btn').href = apk.browser_download_url;
+                    document.getElementById('apk-size').textContent = sizeMB;
+                    document.getElementById('tech-size').textContent = sizeMB;
+                    document.getElementById('download-text').textContent = '下载 ' + apk.name;
+                    
+                    // 更新wget命令
+                    document.getElementById('wget-cmd').textContent = 'wget ' + apk.browser_download_url;
+                    
+                    console.log('Latest release:', data.tag_name, apk.name);
+                } else {
+                    console.warn('No APK found in release assets');
+                }
+            } catch (e) {
+                console.error('Failed to fetch latest release:', e);
+                // 使用硬编码版本作为fallback
+                document.getElementById('latest-version').textContent = 'v1.9.4';
+                document.getElementById('download-btn').href = 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+                document.getElementById('apk-size').textContent = '4.17';
+                document.getElementById('tech-size').textContent = '4.17';
+                document.getElementById('download-text').textContent = '下载 APK (4.17 MB)';
+                document.getElementById('wget-cmd').textContent = 'wget https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
+                
+                // 显示网络错误提示
+                document.getElementById('download-meta').innerHTML = 'Release版本 · R8混淆优化 · arm64-v8a架构 · <span style="color: #dc2626;">网络连接异常，使用缓存版本</span>';
+            }
+        }
+        
         // 图片加载动画
         document.querySelectorAll('.screenshot img').forEach(img => {
             if (img.complete) {
@@ -316,10 +463,14 @@ SDK: API 28+ (Android 9.0)<br>
                     this.classList.add('loaded');
                 });
                 img.addEventListener('error', function() {
-                    this.parentElement.innerHTML = '<div class="loading-placeholder"></div>';
+                    this.parentElement.innerHTML = '<div class="loading-placeholder">📷</div>';
                 });
             }
         });
+        
+        // 页面加载时获取最新版本
+        fetchLatestRelease();
     </script>
+
 </body>
 </html>
