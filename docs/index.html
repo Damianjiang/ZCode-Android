@@ -95,6 +95,14 @@
             transition: all 0.2s;
         }
         .download-btn:hover { background: #1d4ed8; transform: translateY(-1px); }
+        .download-btn.switching {
+            opacity: 0.7;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
         
         /* Screenshots */
         .screenshots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -195,6 +203,46 @@
             border-color: #2563eb;
             background: #2563eb;
             color: white;
+            animation: pulse 0.3s ease-in-out;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        /* 切换指示器 */
+        .switch-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        .switch-indicator.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .switch-indicator.mirror {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            color: #166534;
+        }
+        .switch-indicator.github {
+            background: #eff6ff;
+            border: 1px solid #93c5fd;
+            color: #1e40af;
+        }
+        .source-btn.active {
+            border-color: #2563eb;
+            background: #2563eb;
+            color: white;
         }
         .source-info {
             font-size: 12px;
@@ -280,6 +328,9 @@
     </style>
 </head>
 <body>
+    <!-- 切换指示器 -->
+    <div class="switch-indicator" id="switch-indicator">🔄 正在切换到...</div>
+    
     <div class="container">
         <!-- Header -->
         <header>
@@ -452,6 +503,13 @@ SDK: API 28+ (Android 9.0)<br>
             // 显示切换提示
             console.log('[切换源] 即将重新加载数据...');
             
+            // 显示切换指示器
+            const indicator = document.getElementById('switch-indicator');
+            indicator.className = 'switch-indicator ' + source;
+            indicator.textContent = '🔄 正在切换到: ' + (source === 'mirror' ? '国内镜像' : 'GitHub官方');
+            setTimeout(() => indicator.classList.add('show'), 10);
+            setTimeout(() => indicator.classList.remove('show'), 2000);
+            
             // 重新加载数据
             fetchLatestRelease();
             fetchAllVersions();
@@ -511,6 +569,9 @@ SDK: API 28+ (Android 9.0)<br>
         // 页面加载时获取最新版本信息
         async function fetchLatestRelease() {
             console.log('[fetchLatestRelease] 当前源:', currentSource);
+            // 添加加载状态
+            const btn = document.getElementById('download-btn');
+            btn.classList.add('switching');
             const api_url = currentSource === 'mirror'
                 ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases/latest'
                 : 'https://api.github.com/repos/' + REPO + '/releases/latest';
@@ -539,6 +600,7 @@ SDK: API 28+ (Android 9.0)<br>
                     
                     console.log('Latest release:', data.tag_name, apk.name, '- Source:', currentSource);
                     document.getElementById('api-status').textContent = '✓ 成功';
+                    btn.classList.remove('switching');
                     document.getElementById('api-status').style.color = '#166534';
                 } else {
                     console.warn('No APK found in release assets');
@@ -547,6 +609,7 @@ SDK: API 28+ (Android 9.0)<br>
                 console.error('Failed to fetch latest release:', e);
                 document.getElementById('debug-url').textContent = '错误: ' + e.message;
                 document.getElementById('debug-url').style.color = '#dc2626';
+                btn.classList.remove('switching');
                 // 使用硬编码版本作为fallback
                 document.getElementById('latest-version').textContent = 'v1.9.4';
                 const fallback_url = currentSource === 'mirror'
