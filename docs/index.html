@@ -319,6 +319,34 @@
         footer a { color: #2563eb; text-decoration: none; }
         footer a:hover { text-decoration: underline; }
         
+        /* 源切换背景变化 */
+        body.source-mirror { background: linear-gradient(135deg, #f0fdf4 0%, #fafafa 100%); }
+        body.source-github { background: linear-gradient(135deg, #eff6ff 0%, #fafafa 100%); }
+        
+        /* 源切换指示条 */
+        .source-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 12px 20px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            display: none;
+        }
+        .source-banner.show { display: block; }
+        .source-banner.mirror {
+            background: linear-gradient(90deg, #166534, #22c55e);
+            color: white;
+        }
+        .source-banner.github {
+            background: linear-gradient(90deg, #1e40af, #3b82f6);
+            color: white;
+        }
+        
         /* Responsive */
         @media (max-width: 640px) {
             h1 { font-size: 24px; }
@@ -328,6 +356,11 @@
     </style>
 </head>
 <body>
+    <!-- 源切换顶部指示条 -->
+    <div class="source-banner" id="source-banner">
+        📍 当前使用: <span id="banner-text">国内镜像</span>
+    </div>
+    
     <!-- 切换指示器 -->
     <div class="switch-indicator" id="switch-indicator">🔄 正在切换到...</div>
     
@@ -509,6 +542,18 @@ SDK: API 28+ (Android 9.0)<br>
             indicator.textContent = '🔄 正在切换到: ' + (source === 'mirror' ? '国内镜像' : 'GitHub官方');
             setTimeout(() => indicator.classList.add('show'), 10);
             setTimeout(() => indicator.classList.remove('show'), 2000);
+            
+            // 明显的背景色变化
+            document.body.className = 'source-' + source;
+            
+            // 显示顶部指示条
+            const banner = document.getElementById('source-banner');
+            const bannerText = document.getElementById('banner-text');
+            banner.className = 'source-banner show ' + source;
+            bannerText.textContent = source === 'mirror' ? '🇨🇳 国内镜像 (gh-proxy.com)' : '🌐 GitHub官方 API';
+            
+            // 5秒后隐藏顶部指示条
+            setTimeout(() => banner.classList.remove('show'), 5000);
             
             // 重新加载数据
             fetchLatestRelease();
