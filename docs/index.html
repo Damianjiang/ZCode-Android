@@ -316,39 +316,17 @@ SDK: API 28+ (Android 9.0)<br>
     </div>
 
     <script>
-        const REPO = 'Damianjiang/ZCode-Android';
+        // 直接从GitHub URL构建（无需API调用）
+        const VERSION = 'v1.9.4';
+        const APK_SIZE = '4.17';
+        const DOWNLOAD_URL = 'https://github.com/Damianjiang/ZCode-Android/releases/download/' + VERSION + '/app-release.apk';
         
-        async function fetchLatestRelease() {
-            try {
-                const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
-                const data = await response.json();
-                
-                // 更新版本号
-                document.getElementById('latest-version').textContent = data.tag_name;
-                
-                // 查找APK
-                const apk = data.assets.find(a => a.name.includes('release.apk'));
-                if (apk) {
-                    const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
-                    
-                    // 更新所有下载链接
-                    document.getElementById('download-btn').href = apk.browser_download_url;
-                    document.getElementById('apk-size').textContent = sizeMB;
-                    document.getElementById('tech-size').textContent = sizeMB;
-                    
-                    // 更新wget命令
-                    document.getElementById('wget-cmd').textContent = `wget ${apk.browser_download_url}`;
-                }
-            } catch (e) {
-                console.error('Failed:', e);
-                document.getElementById('latest-version').textContent = 'v1.9.4';
-                document.getElementById('apk-size').textContent = '4.17';
-                document.getElementById('tech-size').textContent = '4.17';
-                console.warn('Using fallback version due to CORS/network error');
-            }
-        }
-        
-        fetchLatestRelease();
+        // 更新所有元素
+        document.getElementById('latest-version').textContent = VERSION;
+        document.getElementById('download-btn').href = DOWNLOAD_URL;
+        document.getElementById('apk-size').textContent = APK_SIZE;
+        document.getElementById('tech-size').textContent = APK_SIZE;
+        document.getElementById('wget-cmd').textContent = 'wget ' + DOWNLOAD_URL;
     </script>
 
         // 图片加载动画
