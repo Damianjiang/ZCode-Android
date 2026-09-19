@@ -54,6 +54,8 @@ fun MainScreen(
     session: AppSessionViewModel,
     onNavigateToShell: (Account) -> Unit,
     onOpenPersonalize: () -> Unit,
+    onOpenAISettings: () -> Unit = {},
+    onOpenFeedback: () -> Unit = {},
     onOpenChangelog: () -> Unit,
     onOpenLogs: () -> Unit = {},
     onOpenCacheClean: () -> Unit = {},
@@ -97,6 +99,8 @@ fun MainScreen(
                     else -> SettingsScreen(
                         session = session,
                         onOpenPersonalize = onOpenPersonalize,
+                        onOpenAISettings = onOpenAISettings,
+                        onOpenFeedback = onOpenFeedback,
                         onOpenChangelog = onOpenChangelog,
                         onOpenLogs = onOpenLogs,
                         onOpenCacheClean = onOpenCacheClean,

@@ -24,8 +24,10 @@ import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -59,7 +61,9 @@ import androidx.compose.ui.unit.dp
 import app.zemote.BuildConfig
 import app.zemote.R
 import app.zemote.state.AppSettings
+import app.zemote.state.AISettings
 import app.zemote.state.LanguagePrefs
+import app.zemote.state.PrivacySettings
 import app.zemote.ui.logger.ZemoteLogger
 import app.zemote.ui.theme.ThemeManager
 import kotlinx.coroutines.launch
@@ -69,6 +73,8 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     session: app.zemote.state.AppSessionViewModel? = null,
     onOpenPersonalize: () -> Unit = {},
+    onOpenAISettings: () -> Unit = {},
+    onOpenFeedback: () -> Unit = {},
     onOpenChangelog: () -> Unit = {},
     onOpenLogs: () -> Unit = {},
     onOpenCacheClean: () -> Unit = {},
@@ -105,77 +111,37 @@ fun SettingsScreen(
             }
             var showLangDialog by remember { mutableStateOf(false) }
 
-            SectionLabel(stringResource(R.string.section_display))
+            SectionLabel(stringResource(R.string.section_ai))
+            SettingsCard {
+                SettingRow(
+                    icon = Icons.Rounded.Settings,
+                    title = stringResource(R.string.ai_settings_title),
+                    subtitle = stringResource(R.string.thought_level_label),
+                    onClick = onOpenAISettings,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                )
+            }
+
+            SectionLabel(stringResource(R.string.section_privacy))
             SettingsCard {
                 Column {
-                    // 历史消息条数：数字输入框 + 保存按钮
-                    var maxMsgText by remember { mutableStateOf(AppSettings.maxMessages.toString()) }
-                    val maxMsg = AppSettings.maxMessages
-                    LaunchedEffect(maxMsg) {
-                        if (maxMsgText.isEmpty() || maxMsgText != maxMsg.toString()) {
-                            maxMsgText = maxMsg.toString()
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Rounded.HistoryEdu,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp),
-                        )
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(stringResource(R.string.max_messages_label), style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                stringResource(R.string.max_messages_sub, maxMsg),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        OutlinedTextField(
-                            value = maxMsgText,
-                            onValueChange = { maxMsgText = it },
-                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                                keyboardType = KeyboardType.Number,
-                                imeAction = ImeAction.Done,
-                            ),
-                            singleLine = true,
-                            modifier = Modifier.width(72.dp),
-                        )
-                        IconButton(
-                            onClick = {
-                                val n = maxMsgText.trim().toIntOrNull()
-                                if (n != null) {
-                                    AppSettings.maxMessages = n
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(ctx.getString(R.string.max_messages_saved, n))
-                                    }
-                                }
-                            },
-                        ) {
-                            Icon(
-                                Icons.Rounded.ClearAll,
-                                contentDescription = stringResource(R.string.save),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
+                    SettingRow(
+                        icon = Icons.Rounded.Lock,
+                        title = stringResource(R.string.privacy_optimize_label),
+                        subtitle = stringResource(R.string.privacy_optimize_sub),
+                        trailing = { Switch(checked = PrivacySettings.optimizeAgentExperience, onCheckedChange = { PrivacySettings.optimizeAgentExperience = it }) },
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    )
                 }
             }
 
-            SectionLabel(stringResource(R.string.section_cache))
+            SectionLabel(stringResource(R.string.section_feedback))
             SettingsCard {
                 SettingRow(
-                    icon = Icons.Rounded.ClearAll,
-                    title = stringResource(R.string.cache_clean_title),
-                    subtitle = stringResource(R.string.cache_clean_subtitle),
-                    onClick = onOpenCacheClean,
+                    icon = Icons.Rounded.BugReport,
+                    title = stringResource(R.string.feedback_title),
+                    subtitle = stringResource(R.string.feedback_description),
+                    onClick = onOpenFeedback,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                 )
             }

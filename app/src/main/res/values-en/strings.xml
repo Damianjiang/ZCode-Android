@@ -239,4 +239,33 @@
     <string name="cache_app_dir_sub">Temporary files created at runtime (%1$s)</string>
     <string name="cache_settings">Settings data</string>
     <string name="cache_settings_sub">Local config cache (%1$s)</string>
+
+    <!-- AI Settings -->
+    <string name="ai_settings_title">AI Settings</string>
+    <string name="section_model_provider">Model Provider</string>
+    <string name="model_provider_label">Select Model Provider</string>
+    <string name="model_provider_sub">BigModel / ZCode</string>
+    <string name="section_thought_level">Thought Level</string>
+    <string name="thought_level_label">Thinking Depth</string>
+    <string name="thought_level_sub">Choose thinking depth based on task complexity</string>
+    <string name="ai_settings_note">Adjusting model and thinking depth can affect AI response speed and quality. Deep thinking consumes more tokens.</string>
+
+    <!-- Feedback -->
+    <string name="feedback_title">Feedback &amp; Help</string>
+    <string name="feedback_description">Description</string>
+    <string name="feedback_description_hint">Describe the issue you encountered…</string>
+    <string name="feedback_screenshots">Screenshots</string>
+    <string name="feedback_add_screenshots">Add Screenshots</string>
+    <string name="feedback_submit">Submit Feedback</string>
+    <string name="feedback_success">Feedback submitted, thank you for your help!</string>
+    <string name="feedback_failed">Submission failed, please try again later</string>
+    <string name="feedback_note">Your feedback helps us improve Zemote. For urgent help, please open an issue on GitHub.</string>
+    <string name="section_ai">AI Settings</string>
+    <string name="section_feedback">Feedback</string>
+    <string name="privacy_optimize_label">Optimize Agent Experience</string>
+    <string name="privacy_optimize_sub">Allow Zemote to collect anonymous usage data to improve the product</string>
+
+    <!-- Privacy -->
+    <string name="section_privacy">Privacy</string>
+
 </resources>

@@ -12,8 +12,8 @@ android {
         applicationId = "app.zemote"
         minSdk = 28
         targetSdk = 35
-        versionCode = 23
-        versionName = "1.9.2"
+        versionCode = 24
+        versionName = "1.9.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.okhttp)
+    implementation("io.coil-kt:coil-compose:2.5.0")
     implementation(libs.gson)
     debugImplementation(libs.androidx.ui.tooling)
 }

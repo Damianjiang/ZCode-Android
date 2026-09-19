@@ -17,9 +17,11 @@ import android.net.Uri
 import app.zemote.state.AccountStore
 import app.zemote.state.AppSessionViewModel
 import app.zemote.ui.screens.AccountsScreen
+import app.zemote.ui.screens.AISettingsScreen
+import app.zemote.ui.screens.CacheCleanScreen
 import app.zemote.ui.screens.ChatScreen
 import app.zemote.ui.screens.ChangelogScreen
-import app.zemote.ui.screens.CacheCleanScreen
+import app.zemote.ui.screens.FeedbackScreen
 import app.zemote.ui.screens.LogScreen
 import app.zemote.ui.screens.MainScreen
 import app.zemote.ui.screens.MainShellScreen
@@ -62,6 +64,8 @@ private fun exitThrough(): ExitTransition = fadeOut(tween(DurOut, easing = Accel
 sealed class Screen(val route: String) {
     object Main : Screen("main")
     object Personalize : Screen("personalize")
+    object AISettings : Screen("ai_settings")
+    object Feedback : Screen("feedback")
     object Changelog : Screen("changelog")
     object Log : Screen("log")
     object CacheClean : Screen("cache_clean")
@@ -127,6 +131,12 @@ fun ZemoteNavHost(
         }
         composable(Screen.Personalize.route) {
             PersonalizeScreen(onBack = { navController.popBackStack() }, themeManager = themeManager)
+        }
+        composable(Screen.AISettings.route) {
+            AISettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Screen.Feedback.route) {
+            FeedbackScreen(onBack = { navController.popBackStack() })
         }
         composable(Screen.Changelog.route) {
             ChangelogScreen(onBack = { navController.popBackStack() })

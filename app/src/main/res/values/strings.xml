@@ -239,4 +239,33 @@
     <string name="cache_crash_report_sub">上次崩溃的诊断日志（%1$s）</string>
     <string name="cache_settings">设置数据</string>
     <string name="cache_settings_sub">本地配置缓存（%1$s）</string>
+
+    <!-- AI 设置 -->
+    <string name="ai_settings_title">AI 设置</string>
+    <string name="section_model_provider">模型提供商</string>
+    <string name="model_provider_label">选择模型提供商</string>
+    <string name="model_provider_sub">BigModel / ZCode</string>
+    <string name="section_thought_level">思考等级</string>
+    <string name="thought_level_label">思考深度</string>
+    <string name="thought_level_sub">根据任务复杂度选择思考深度</string>
+    <string name="ai_settings_note">调整模型和 thinking 深度可以影响 AI 回复的速度和质量。深度思考会消耗更多 token。</string>
+
+    <!-- 反馈工单 -->
+    <string name="feedback_title">反馈与帮助</string>
+    <string name="feedback_description">问题描述</string>
+    <string name="feedback_description_hint">请描述您遇到的问题…</string>
+    <string name="feedback_screenshots">截图</string>
+    <string name="feedback_add_screenshots">添加截图</string>
+    <string name="feedback_submit">提交反馈</string>
+    <string name="feedback_success">反馈已提交，感谢您的帮助！</string>
+    <string name="feedback_failed">提交失败，请稍后重试</string>
+    <string name="feedback_note">您的反馈将帮助我们改进 Zemote。如需紧急帮助，请在 GitHub 提交 issue。</string>
+    <string name="section_ai">AI 设置</string>
+    <string name="section_feedback">反馈与帮助</string>
+    <string name="privacy_optimize_label">优化 Agent 体验</string>
+    <string name="privacy_optimize_sub">允许 Zemote 收集匿名使用数据以改善产品</string>
+
+    <!-- 隐私设置 -->
+    <string name="section_privacy">隐私</string>
+
 </resources>
