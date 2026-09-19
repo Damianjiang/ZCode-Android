@@ -23,6 +23,9 @@ object AISettings {
         this.context = context.applicationContext
     }
 
+    /** 检查是否已初始化 */
+    fun isInitialized(): Boolean = ::context.isInitialized
+
     /**
      * 支持的模型提供商列表
      * 对应官方 Web 中的 bigmodel / zcode 等 provider
@@ -42,39 +45,47 @@ object AISettings {
         DEEP("deep", "Deep"),
     }
 
-    /** 当前选中的模型提供商 */
+    /** 当前选中的模型提供商（安全访问） */
     var modelProvider: ModelProvider
         get() {
+            if (!::context.isInitialized) return ModelProvider.BIGMODEL
             val id = context.getSharedPreferences(FILE, MODE_PRIVATE)
                 .getString(Keys.MODEL_PROVIDER, ModelProvider.BIGMODEL.id)
                 ?: ModelProvider.BIGMODEL.id
             return ModelProvider.values().firstOrNull { it.id == id } ?: ModelProvider.BIGMODEL
         }
         set(value) {
+            if (!::context.isInitialized) return
             context.getSharedPreferences(FILE, MODE_PRIVATE).edit()
                 .putString(Keys.MODEL_PROVIDER, value.id)
                 .apply()
         }
 
-    /** 当前选中的模型 ID */
+    /** 当前选中的模型 ID（安全访问） */
     var modelId: String
-        get() = context.getSharedPreferences(FILE, MODE_PRIVATE)
-            .getString(Keys.MODEL_ID, "") ?: ""
+        get() {
+            if (!::context.isInitialized) return ""
+            return context.getSharedPreferences(FILE, MODE_PRIVATE)
+                .getString(Keys.MODEL_ID, "") ?: ""
+        }
         set(value) {
+            if (!::context.isInitialized) return
             context.getSharedPreferences(FILE, MODE_PRIVATE).edit()
                 .putString(Keys.MODEL_ID, value)
                 .apply()
         }
 
-    /** 当前选中的思考等级 */
+    /** 当前选中的思考等级（安全访问） */
     var thoughtLevel: ThoughtLevel
         get() {
+            if (!::context.isInitialized) return ThoughtLevel.AUTO
             val id = context.getSharedPreferences(FILE, MODE_PRIVATE)
                 .getString(Keys.THOUGHT_LEVEL, ThoughtLevel.AUTO.id)
                 ?: ThoughtLevel.AUTO.id
             return ThoughtLevel.values().firstOrNull { it.id == id } ?: ThoughtLevel.AUTO
         }
         set(value) {
+            if (!::context.isInitialized) return
             context.getSharedPreferences(FILE, MODE_PRIVATE).edit()
                 .putString(Keys.THOUGHT_LEVEL, value.id)
                 .apply()

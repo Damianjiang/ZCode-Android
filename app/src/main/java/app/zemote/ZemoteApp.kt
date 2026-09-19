@@ -2,6 +2,7 @@ package app.zemote
 
 import android.app.Application
 import app.zemote.crash.CrashHandler
+import app.zemote.state.AISettings
 
 /**
  * Application class for Zemote.
@@ -11,5 +12,7 @@ class ZemoteApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashHandler.install(this)
+        // 初始化AI设置（必须在访问AISettings之前调用）
+        AISettings.init(this)
     }
 }
