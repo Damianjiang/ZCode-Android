@@ -252,14 +252,12 @@
 
     <!-- Feedback -->
     <string name="feedback_title">Feedback &amp; Help</string>
-    <string name="feedback_description">Description</string>
-    <string name="feedback_description_hint">Describe the issue you encountered…</string>
-    <string name="feedback_screenshots">Screenshots</string>
-    <string name="feedback_add_screenshots">Add Screenshots</string>
-    <string name="feedback_submit">Submit Feedback</string>
-    <string name="feedback_success">Feedback submitted, thank you for your help!</string>
-    <string name="feedback_failed">Submission failed, please try again later</string>
-    <string name="feedback_note">Your feedback helps us improve Zemote. For urgent help, please open an issue on GitHub.</string>
+    <string name="feedback_select_method">Select Feedback Method</string>
+    <string name="feedback_qq_group">QQ Group Feedback</string>
+    <string name="feedback_github">GitHub Issues Feedback</string>
+    <string name="feedback_copy_qq">Copy Group Number</string>
+    <string name="feedback_join_qq">Join QQ Group</string>
+    <string name="feedback_qq_copied">Group number copied to clipboard</string>
     <string name="section_ai">AI Settings</string>
     <string name="section_feedback">Feedback</string>
     <string name="privacy_optimize_label">Optimize Agent Experience</string>
