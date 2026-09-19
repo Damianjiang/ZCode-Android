@@ -114,6 +114,8 @@ fun ZemoteNavHost(
                     navController.navigate(Screen.MainShell.createRoute(account.id))
                 },
                 onOpenPersonalize = { navController.navigate(Screen.Personalize.route) },
+                onOpenAISettings = { navController.navigate(Screen.AISettings.route) },
+                onOpenFeedback = { navController.navigate(Screen.Feedback.route) },
                 onOpenChangelog = { navController.navigate(Screen.Changelog.route) },
                 onOpenLogs = { navController.navigate(Screen.Log.route) },
                 onOpenCacheClean = { navController.navigate(Screen.CacheClean.route) },
