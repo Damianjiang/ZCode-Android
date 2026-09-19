@@ -15,10 +15,11 @@ object PrivacySettings {
 
     private const val FILE = "zemote_privacy_settings"
 
-    private lateinit var context: Context
+    @Volatile
+    private var contextRef: Context? = null
 
     fun init(context: Context) {
-        this.context = context.applicationContext
+        this.contextRef = context.applicationContext
     }
 
     /**
@@ -26,11 +27,11 @@ object PrivacySettings {
      * 对应官方Web的 settings.privacy.toggle_optimize_agent_experience
      */
     var optimizeAgentExperience: Boolean
-        get() = context.getSharedPreferences(FILE, MODE_PRIVATE)
-            .getBoolean(Keys.OPTIMIZE_AGENT_EXPERIENCE, true)
+        get() = contextRef?.getSharedPreferences(FILE, MODE_PRIVATE)
+            ?.getBoolean(Keys.OPTIMIZE_AGENT_EXPERIENCE, true) ?: true
         set(value) {
-            context.getSharedPreferences(FILE, MODE_PRIVATE).edit()
-                .putBoolean(Keys.OPTIMIZE_AGENT_EXPERIENCE, value)
-                .apply()
+            contextRef?.getSharedPreferences(FILE, MODE_PRIVATE)?.edit()
+                ?.putBoolean(Keys.OPTIMIZE_AGENT_EXPERIENCE, value)
+                ?.apply()
         }
 }

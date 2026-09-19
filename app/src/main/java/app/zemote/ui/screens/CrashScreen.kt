@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,9 +48,9 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.Center,
+            .padding(16.dp),
     ) {
+        // 标题栏
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 Icons.Rounded.BugReport,
@@ -68,12 +69,15 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
             }
         }
 
-        Spacer(modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
+        // 日志区域 - 可滚动但限制最大高度
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
         ) {
             Text(
                 log,
@@ -86,34 +90,38 @@ fun CrashScreen(log: String, onRestart: () -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        val logTitle = stringResource(R.string.crash_log_title)
-        val copiedMsg = stringResource(R.string.crash_copied)
-        Button(
-            onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText(logTitle, log))
-                Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
-            },
-            shape = RoundedCornerShape(14.dp),
+        // 按钮区域 - 固定底部，不被覆盖
+        Column(
             modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(stringResource(R.string.crash_copy))
-        }
+            val logTitle = stringResource(R.string.crash_log_title)
+            val copiedMsg = stringResource(R.string.crash_copied)
+            Button(
+                onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText(logTitle, log))
+                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.crash_copy))
+            }
 
-        Spacer(modifier = Modifier.size(10.dp))
-
-        OutlinedButton(
-            onClick = onRestart,
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(stringResource(R.string.crash_restart))
+            OutlinedButton(
+                onClick = onRestart,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.crash_restart))
+            }
         }
     }
 }
