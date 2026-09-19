@@ -30,11 +30,9 @@ class ZemoteClient(
     private val pendingMatchers = ConcurrentHashMap<String, (Map<String, Any>) -> Boolean>()
     private val pendingCompleters = ConcurrentHashMap<String, CompletableDeferred<Map<String, Any>>>()
     private var bridgeGeneration = 0
-    private val recoveringBridges = ConcurrentHashMap<String, Boolean>()
 
     companion object {
         const val BRIDGE_OP_TIMEOUT_MS = 60_000L
-        private val BRIDGE_REOPEN_DELAYS = listOf(250L, 1000L, 3000L)
     }
 
     suspend fun connect() {
@@ -141,12 +139,12 @@ class ZemoteClient(
         }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
     }
 
-    private suspend fun reopenBridge(session: BridgeSession, retryAttempt: Int = 0) {
+    private suspend fun reopenBridge(session: BridgeSession) {
         val oldBridge = session.bridge
         val bridgeSessionId = generateRequestId("bridge")
         val generation = ++bridgeGeneration
         val requestId = generateRequestId("workspace-bridge")
-        onLog?.invoke("[bridge] reopen ${session.workspaceKey} (gen $generation, attempt ${retryAttempt + 1})")
+        onLog?.invoke("[bridge] reopen ${session.workspaceKey} (gen $generation)")
         val payload = buildMap<String, Any> {
             put("zcode_type", "workspace-bridge-open")
             put("requestId", requestId)
@@ -163,15 +161,7 @@ class ZemoteClient(
             (t == "workspace-bridge-ready" || t == "workspace-bridge-error") && bsid == bridgeSessionId
         }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
         if (response["zcode_type"] == "workspace-bridge-error") {
-            val errorMsg = response["error"] as? String ?: "unknown"
-            if (retryAttempt < BRIDGE_REOPEN_DELAYS.size) {
-                val delayMs = BRIDGE_REOPEN_DELAYS[retryAttempt]
-                onLog?.invoke("[bridge] reopen error: $errorMsg, retrying in ${delayMs}ms")
-                delay(delayMs)
-                reopenBridge(session, retryAttempt + 1)
-                return
-            }
-            throw IOException("workspace-bridge-error: $errorMsg")
+            throw IOException("workspace-bridge-error: ${response["error"]}")
         }
         @Suppress("UNCHECKED_CAST")
         val bridge = (response["bridge"] as? Map<String, Any>) ?: emptyMap()
@@ -272,7 +262,6 @@ class ZemoteClient(
             if (session.isRecovering) continue
             if (session.isDisposed) continue
             session.isRecovering = true
-            recoveringBridges[session.bridgeSessionId] = true
             relayScope.launch {
                 try {
                     if (session.isDisposed) return@launch
@@ -291,7 +280,6 @@ class ZemoteClient(
                     }
                 } finally {
                     session.isRecovering = false
-                    recoveringBridges.remove(session.bridgeSessionId)
                 }
             }
         }
@@ -301,7 +289,6 @@ class ZemoteClient(
         relayScope.cancel()
         for (session in activeBridges.values.toList()) session.dispose()
         activeBridges.clear()
-        recoveringBridges.clear()
         relay.dispose()
         _state.value = ZemoteClientState.CLOSED
     }

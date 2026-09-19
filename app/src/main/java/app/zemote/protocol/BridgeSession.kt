@@ -15,7 +15,6 @@ class BridgeSession(
     private val onLog: ((String) -> Unit)?,
 ) {
     val degraded = MutableStateFlow<String?>(null)
-    val recovered = MutableStateFlow(0)
 
     private var _disposed = false
     private var _transport: RpcFrameTransport
@@ -23,7 +22,6 @@ class BridgeSession(
     private var relayListenerScope: CoroutineScope? = null
     private var staleTimer: Job? = null
     private var lastMessageAt = System.currentTimeMillis()
-    private val staleScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val workspaceKey: String? get() = bridge["workspaceKey"] as? String
     val initialTaskId: String? get() = bridge["initialTaskId"] as? String
@@ -49,13 +47,13 @@ class BridgeSession(
 
     private fun startStaleTimer() {
         staleTimer?.cancel()
-        staleTimer = staleScope.launch {
+        staleTimer = CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             delay(STALE_RECOVERY_TIMEOUT_MS)
             if (_disposed) return@launch
             val elapsed = System.currentTimeMillis() - lastMessageAt
             if (elapsed >= STALE_RECOVERY_TIMEOUT_MS && degraded.value == null) {
-                onLog?.invoke("[bridge] stale timer fired: ${elapsed}ms since last frame")
-                degraded.value = "stale-no-frames"
+                onLog?.invoke("[bridge] stale timer fired: ${elapsed}ms")
+                degraded.value = "stale"
                 onDispose(this@BridgeSession)
             }
         }
@@ -119,7 +117,6 @@ class BridgeSession(
         staleTimer = null
         relayListenerScope?.cancel()
         relayListenerScope = null
-        staleScope.cancel()
         _transport.dispose()
         _channels.dispose()
         onDispose(this)
