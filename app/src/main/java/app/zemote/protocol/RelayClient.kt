@@ -13,6 +13,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.util.concurrent.TimeUnit
+import com.google.gson.Gson
 
 enum class RelayState {
     IDLE, CONNECTING, AUTHENTICATING, WAITING, PAIRED, RECONNECTING, ERROR, KICKED, CLOSED
@@ -25,6 +26,7 @@ class RelayClient(
     private val onLog: ((String) -> Unit)? = null,
 ) {
     companion object {
+        private val gson = Gson()
         const val HEARTBEAT_INTERVAL_MS = 10_000L
         const val HEARTBEAT_ACK_TIMEOUT_MS = 30_000L
         const val WAITING_TIMEOUT_MS = 30_000L
