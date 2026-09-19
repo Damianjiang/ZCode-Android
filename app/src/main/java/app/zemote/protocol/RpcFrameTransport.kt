@@ -33,7 +33,7 @@ class RpcFrameTransport(
     private var seq = 0
     private var messageSeq = 0
 
-    private val assemblies = mutableMapOf<Int, Assembly>()
+    private val assemblies = java.util.concurrent.ConcurrentHashMap<Int, Assembly>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
