@@ -6,13 +6,14 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.buffer
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeoutException
 
 /**
  * High-level facade replicating the web client's otn() flow.
- * relay connect → pair → bootstrap → workspace-bridge → channel RPC.
+ * relay connect -> pair -> bootstrap -> workspace-bridge -> channel RPC.
  */
 class ZemoteClient(
     val params: ZemoteConnectionParams,
@@ -33,6 +34,19 @@ class ZemoteClient(
     private val pendingMatchers = ConcurrentHashMap<String, (Map<String, Any>) -> Boolean>()
     private val pendingCompleters = ConcurrentHashMap<String, CompletableDeferred<Map<String, Any>>>()
     private var bridgeGeneration = 0
+    /** Track which bridges are actively recovering to avoid concurrent reopen attempts. */
+    private val recoveringBridges = ConcurrentHashMap<String, Boolean>()
+
+    companion object {
+        /**
+         * Timeout for bridge operations (open/reopen). Mirrors the web client's
+         * bridge timeout. Increased from 30s to 60s for large workspaces with
+         * heavy conversation history to reduce premature timeouts.
+         */
+        const val BRIDGE_OP_TIMEOUT_MS = 60_000L
+        /** Retry delays for bridge reopen, mirroring web client's ETe=[250,1e3,3e3]. */
+        private val BRIDGE_REOPEN_DELAYS = listOf(250L, 1000L, 3000L)
+    }
 
     suspend fun connect() {
         _state.value = ZemoteClientState.CONNECTING
@@ -78,7 +92,7 @@ class ZemoteClient(
             val t = p["zcode_type"] as? String
             val bsid = p["bridgeSessionId"] as? String
             (t == "workspace-bridge-ready" || t == "workspace-bridge-error") && bsid == bridgeSessionId
-        })
+        }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
         if (response["zcode_type"] == "workspace-bridge-error") {
             throw IOException("workspace-bridge-error: ${response["error"]}")
         }
@@ -122,7 +136,7 @@ class ZemoteClient(
         }
     }
 
-    /** bootstrap-request → bootstrap-response (workspaces overview). */
+    /** bootstrap-request -> bootstrap-response (workspaces overview). */
     suspend fun bootstrap(): Map<String, Any> {
         val id = generateRequestId("bootstrap")
         val res = request(mapOf("zcode_type" to "bootstrap-request", "requestId" to id), match = { p ->
@@ -131,7 +145,7 @@ class ZemoteClient(
         return (res["result"] as? Map<String, Any>) ?: res
     }
 
-    /** workspace-list-request → workspace-list-response. */
+    /** workspace-list-request -> workspace-list-response. */
     suspend fun listWorkspaces(): Any? {
         val id = generateRequestId("workspace-list")
         val res = request(mapOf("zcode_type" to "workspace-list-request", "requestId" to id), match = { p ->
@@ -140,7 +154,7 @@ class ZemoteClient(
         return res["result"]
     }
 
-    /** workspace-reconnect-request → workspace-reconnect-response. */
+    /** workspace-reconnect-request -> workspace-reconnect-response. */
     suspend fun reconnectWorkspace(workspaceKey: String): Map<String, Any> {
         val id = generateRequestId("workspace-reconnect")
         return request(mapOf(
@@ -150,20 +164,21 @@ class ZemoteClient(
         ), match = { p ->
             (p["zcode_type"] as? String) == "workspace-reconnect-response" &&
                     p["requestId"] == id && p["workspaceKey"] == workspaceKey
-        })
+        }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
     }
 
     /**
      * Reopens a degraded/dead bridge: new `workspace-bridge-open` (fresh
      * bridgeSessionId, bumped generation, carries recoveryId), then swaps
      * the stack into the existing [BridgeSession].
+     * Mirrors the web client's `reopenBridge()` with exponential backoff retries.
      */
-    private suspend fun reopenBridge(session: BridgeSession) {
+    private suspend fun reopenBridge(session: BridgeSession, retryAttempt: Int = 0) {
         val oldBridge = session.bridge
         val bridgeSessionId = generateRequestId("bridge")
         val generation = ++bridgeGeneration
         val requestId = generateRequestId("workspace-bridge")
-        onLog?.invoke("[bridge] reopen ${session.workspaceKey} (gen $generation)")
+        onLog?.invoke("[bridge] reopen ${session.workspaceKey} (gen $generation, attempt ${retryAttempt + 1})")
         val payload = buildMap<String, Any> {
             put("zcode_type", "workspace-bridge-open")
             put("requestId", requestId)
@@ -178,9 +193,18 @@ class ZemoteClient(
             val t = p["zcode_type"] as? String
             val bsid = p["bridgeSessionId"] as? String
             (t == "workspace-bridge-ready" || t == "workspace-bridge-error") && bsid == bridgeSessionId
-        })
+        }, timeoutMs = BRIDGE_OP_TIMEOUT_MS)
         if (response["zcode_type"] == "workspace-bridge-error") {
-            throw IOException("workspace-bridge-error: ${response["error"]}")
+            val errorMsg = response["error"] as? String ?: "unknown"
+            // If we have retries left, wait and retry
+            if (retryAttempt < BRIDGE_REOPEN_DELAYS.size) {
+                val delayMs = BRIDGE_REOPEN_DELAYS[retryAttempt]
+                onLog?.invoke("[bridge] reopen error: $errorMsg, retrying in ${delayMs}ms")
+                delay(delayMs)
+                reopenBridge(session, retryAttempt + 1)
+                return
+            }
+            throw IOException("workspace-bridge-error: $errorMsg")
         }
         @Suppress("UNCHECKED_CAST")
         val bridge = (response["bridge"] as? Map<String, Any>) ?: emptyMap()
@@ -212,15 +236,21 @@ class ZemoteClient(
 
     init {
         // Collect relay payloads and dispatch to matchers + bridge sessions.
-        // This is the single dispatcher — BridgeSessions listen directly for
+        // This is the single dispatcher -- BridgeSessions listen directly for
         // rpc-frame messages to avoid duplication.
+        // buffer(UNLIMITED): same as BridgeSession, prevents this subscriber's
+        // processing time from backpressuring relay's SharedFlow
+        // (extraBufferCapacity=256, default SUSPEND) and slowing the whole inbound pipeline.
         relayScope.launch {
-            relay.payloads.collect { payload ->
-                dispatchPayload(payload)
-            }
+            relay.payloads
+                .buffer(kotlinx.coroutines.channels.Channel.UNLIMITED)
+                .collect { payload ->
+                    dispatchPayload(payload)
+                }
         }
-        // relay 层状态同步：断线/被抢占后重新配对成功时，恢复客户端状态并
-        // 重建所有 workspace bridge（服务端侧的桥已随断连失效）。
+        // Relay layer state sync: after disconnect/preempt then re-pair success,
+        // restore client state and rebuild all workspace bridges
+        // (server-side bridges are invalidated with the disconnect).
         relayScope.launch {
             var hasBeenPaired = false
             relay.state.collect { st ->
@@ -255,7 +285,9 @@ class ZemoteClient(
                 val bsid = payload["bridgeSessionId"] as? String
                 val reason = payload["reason"] as? String
                 onLog?.invoke("[bridge] degraded: $bsid reason=$reason")
-                activeBridges.values.filter { it.bridge["bridgeSessionId"] == bsid }.forEach { it.degraded.value = reason }
+                activeBridges.values.filter { it.bridge["bridgeSessionId"] == bsid }.forEach {
+                    it.degraded.value = reason
+                }
                 if (bsid != null) relayScope.launch { recoverActiveBridges() }
                 return
             }
@@ -282,19 +314,20 @@ class ZemoteClient(
     }
 
     /**
-     * Retries bridge recovery until it succeeds, so a degraded bridge never
-     * strands commands ("can't send after reconnect").
-     */
-    /**
-     * Bridge 恢复：对齐官方流程 — 直接走 workspace-bridge-open 重建桥接。
-     * 官方源码（P=async(e,t)=>...）不区分 reconnect 和 reopen，
-     * 统一通过 workspace-bridge-open + recoveryId 重建整条通道。
+     * Bridge recovery: aligns with official flow -- directly uses workspace-bridge-open
+     * to rebuild the bridge. Official source (P=async(e,t)=>...) does not distinguish
+     * reconnect and reopen, unified through workspace-bridge-open + recoveryId.
+     * Added: skip already-recovering bridges to prevent concurrent reopen attempts.
      */
     private suspend fun recoverActiveBridges() {
         onLog?.invoke("[bridge] recovering ${activeBridges.size} bridge(s)")
         for (session in activeBridges.values.toList()) {
+            // Skip if already recovering to prevent concurrent reopen attempts
             if (session.isRecovering) continue
+            // Skip if already being disposed
+            if (session.isDisposed) continue
             session.isRecovering = true
+            recoveringBridges[session.bridgeSessionId] = true
             relayScope.launch {
                 try {
                     if (session.isDisposed) return@launch
@@ -305,7 +338,7 @@ class ZemoteClient(
                             session.degraded.value = null
                             onLog?.invoke("[bridge] recovered $workspaceKey")
                         } catch (e: Exception) {
-                            session.degraded.value = "reopen-failed: $e"
+                            session.degraded.value = "reopen-failed: ${e.message}"
                             onLog?.invoke("[bridge] reopen failed: $e")
                         }
                     } else {
@@ -313,6 +346,7 @@ class ZemoteClient(
                     }
                 } finally {
                     session.isRecovering = false
+                    recoveringBridges.remove(session.bridgeSessionId)
                 }
             }
         }
@@ -322,6 +356,7 @@ class ZemoteClient(
         relayScope.cancel()
         for (session in activeBridges.values.toList()) session.dispose()
         activeBridges.clear()
+        recoveringBridges.clear()
         relay.dispose()
         _state.value = ZemoteClientState.CLOSED
     }

@@ -1,15 +1,10 @@
 package app.zemote.protocol
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-
 /**
  * RPC frame transport: logical messages split into frames with CRC32 checksum.
  *
  * Outbound: [sendMessage()] takes the full IPC frame body (with or without the
- *   13-byte framing header — [ChannelClient] includes it), fragments it, and
+ *   13-byte framing header -- [ChannelClient] includes it), fragments it, and
  *   sends rpc-frames.
  *
  * Inbound:  [acceptPayload()] reassembles fragments, verifies CRC32, and emits
@@ -28,18 +23,28 @@ class RpcFrameTransport(
         const val MAX_FRAGMENT_BYTES = 512 * 1024
         const val MAX_MESSAGE_BYTES = 16 * 1024 * 1024
         const val MAX_FRAGMENTS = 64
+        /**
+         * Timeout for in-progress frame assemblies. Mirrors the web client's
+         * logicalFrameAssemblyTimeoutMs (default 5000ms). Old/incomplete assemblies
+         * are discarded to prevent them from blocking new messages.
+         */
+        const val ASSEMBLY_TIMEOUT_MS = 5_000L
     }
 
     private var seq = 0
     private var messageSeq = 0
 
-    private val assemblies = mutableMapOf<Int, Assembly>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /**
+     * Incomplete (partially arrived) message reassembly table.
+     * Uses ConcurrentHashMap: writes happen in bridge's inbound collect coroutine,
+     * [dispose] clears from another thread, normal HashMap has concurrency risk.
+     */
+    private val assemblies = java.util.concurrent.ConcurrentHashMap<Int, Assembly>()
 
     /**
      * Callback fired when a complete, CRC32-verified message is reassembled.
      * The [frame] is the FULL assembled bytes including the 13-byte IPC framing
-     * header — the caller is responsible for decoding the value-list inside.
+     * header -- the caller is responsible for decoding the value-list inside.
      */
     var onMessage: ((ByteArray) -> Unit)? = null
 
@@ -51,9 +56,25 @@ class RpcFrameTransport(
         }
 
     /**
+     * Cleans up any assemblies that have exceeded the timeout, preventing
+     * partial message data from blocking subsequent messages.
+     * Mirrors the web client's LogicalFrameAssembler timeout cleanup.
+     */
+    private fun expireStaleAssemblies() {
+        val now = System.currentTimeMillis()
+        val expired = assemblies.entries.filter { (_, a) ->
+            now - a.lastSeen >= ASSEMBLY_TIMEOUT_MS
+        }.map { it.key }.toList()
+        if (expired.isNotEmpty()) {
+            onLog?.invoke("[rpc] expiring ${expired.size} stale assembly(s) (>${ASSEMBLY_TIMEOUT_MS}ms)")
+            expired.forEach { assemblies.remove(it) }
+        }
+    }
+
+    /**
      * Fragments [bytes] into rpc-frames and sends them via [sendPayload].
      * [bytes] should be the complete IPC message (with 13-byte framing header
-     * if present — [ChannelClient] includes it).
+     * if present -- [ChannelClient] includes it).
      */
     fun sendMessage(bytes: ByteArray) {
         if (bytes.isEmpty()) throw IllegalArgumentException("empty message")
@@ -100,7 +121,7 @@ class RpcFrameTransport(
         val checksum = (payload["checksum"] as? Map<*, *>)?.get("value") as? String
 
         if (type == "rpc-frame-ack") {
-            // 服务端 ack 带的是 ackMessageSeq 字段
+            // Server ack carries ackMessageSeq field
             val ackSeq = (payload["ackMessageSeq"] as? Number)?.toInt()
                 ?: (payload["messageSeq"] as? Number)?.toInt()
             if (ackSeq != null) assemblies.remove(ackSeq)
@@ -108,15 +129,37 @@ class RpcFrameTransport(
         }
 
         if (dataBase64 == null) return true
+        // Out-of-bounds fragment index: drop directly to avoid ArrayIndexOutOfBoundsException
+        if (fragIdx < 0 || fragIdx >= fragCount) return true
+
+        // Dedup before decode: duplicate fragments (server retransmit / replay) dropped directly.
+        // Old implementation unconditionally decoded first then wrote, wasting a max 512KB
+        // decode on retransmit, and this code runs in the bridge's single inbound collect
+        // coroutine which would directly slow down all subsequent frames.
+        val existing = assemblies[msgSeqVal]
+        if (existing != null && existing.count == fragCount && existing.fragments[fragIdx] != null) {
+            return true
+        }
         val chunk = try { android.util.Base64.decode(dataBase64, android.util.Base64.NO_WRAP) } catch (_: Exception) { return true }
 
-        val assembly = assemblies.getOrPut(msgSeqVal) {
-            Assembly(crc32 = checksum ?: "", count = fragCount)
+        val assembly = if (existing != null && existing.count == fragCount) {
+            existing
+        } else {
+            if (existing != null) assemblies.remove(msgSeqVal)
+            Assembly(crc32 = checksum ?: "", count = fragCount).also { assemblies[msgSeqVal] = it }
         }
         assembly.fragments[fragIdx] = chunk
+        // Use counter instead of `fragments.all { it != null }`: old写法每收到一个分片都要
+        // 把整个数组扫一遍（64 分片 = 每分片 64 次检查），这里是入站热路径。
+        assembly.received += 1
         assembly.lastSeen = System.currentTimeMillis()
 
-        if (assembly.fragments.size == fragCount && assembly.fragments.all { it != null }) {
+        if (assembly.received == fragCount) {
+            if (msgBytes <= 0 || msgBytes > MAX_MESSAGE_BYTES) {
+                onLog?.invoke("[rpc] bad messageBytes=$msgBytes for msg $msgSeqVal")
+                assemblies.remove(msgSeqVal)
+                return true
+            }
             // Reassemble into complete message (includes 13-byte IPC header)
             val assembled = ByteArray(msgBytes)
             var offset = 0
@@ -132,11 +175,16 @@ class RpcFrameTransport(
                 assemblies.remove(msgSeqVal)
                 return true
             }
-            // 收到完整消息后必须 ack，否则服务端会重传并最终判定 rpc-transport-fault
+            // Must ack after receiving complete message, otherwise server retransmits and
+            // eventually判定 rpc-transport-fault
             sendAck(msgSeqVal)
-            // Emit complete assembled message (with framing header) — caller decodes
+            // Emit complete assembled message (with framing header) -- caller decodes
             onMessage?.invoke(assembled)
             assemblies.remove(msgSeqVal)
+        } else {
+            // Periodically clean up stale assemblies to prevent memory leaks
+            // and blockage of new messages. Mirrors web client's frame assembly timeout.
+            expireStaleAssemblies()
         }
         return true
     }
@@ -153,8 +201,9 @@ class RpcFrameTransport(
         val crc32: String,
         val count: Int,
         val fragments: Array<ByteArray?> = arrayOfNulls(count),
+        var received: Int = 0,
         var lastSeen: Long = System.currentTimeMillis(),
     )
 
-    fun dispose() { assemblies.clear(); scope.cancel() }
+    fun dispose() { assemblies.clear() }
 }
