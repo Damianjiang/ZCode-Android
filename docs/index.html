@@ -557,121 +557,37 @@ SDK: API 28+ (Android 9.0)<br>
             
             // 重新加载数据
             fetchLatestRelease();
-            fetchAllVersions();
+            renderVersionHistory();
         }
         
-        // 获取镜像URL（国内加速）
-        function getMirrorUrl(originalUrl) {
-            if (currentSource === 'mirror' && originalUrl) {
-                return 'https://gh-proxy.com/' + originalUrl;
-            }
-            return originalUrl;
-        }
-        
-        // 显示所有版本
-        async function fetchAllVersions() {
+// 版本历史（静态列表）
+        const VERSION_HISTORY = [
+            { tag: 'v1.9.4', date: '2026-09-19', desc: '添加源选择功能，支持国内镜像和GitHub官方', url: 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk', size: '4.17' },
+            { tag: 'v1.9.3', date: '2026-09-18', desc: '修复PrivacySettings崩溃和CrashScreen布局问题', url: 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.3/app-release.apk', size: '4.15' },
+            { tag: 'v1.9.2', date: '2026-09-17', desc: '优化远程控制连接稳定性', url: 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.2/app-release.apk', size: '4.12' },
+        ];
+
+        function renderVersionHistory() {
             const container = document.getElementById('version-list-container');
-            container.innerHTML = '<p style="color: #999;">加载中...</p>';
-            
-            try {
-                const api_url = currentSource === 'mirror' 
-                    ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases'
-                    : 'https://api.github.com/repos/' + REPO + '/releases';
-                    
-                const response = await fetch(api_url);
-                const data = await response.json();
-                
-                if (!data || data.length === 0) {
-                    container.innerHTML = '<p style="color: #999;">暂无版本信息</p>';
-                    return;
-                }
-                
-                let html = '<ul class="version-list">';
-                data.forEach(release => {
-                    const date = new Date(release.published_at).toLocaleDateString('zh-CN');
-                    const body = release.body ? release.body.substring(0, 100) + '...' : '暂无更新说明';
-                    const apk = release.assets.find(a => a.name.includes('release.apk'));
-                    const sizeMB = apk ? (apk.size / 1024 / 1024).toFixed(2) : '--';
-                    
-                    html += '<li>';
-                    html += '<div class="version-tag">' + release.tag_name + '<span class="version-date">' + date + '</span></div>';
-                    html += '<div class="version-desc">' + body + '</div>';
-                    if (apk) {
-                        const download_url = getMirrorUrl(apk.browser_download_url);
-                        html += '<a href="' + download_url + '" class="version-download" target="_blank">下载 APK (' + sizeMB + ' MB)</a>';
-                    }
-                    html += '</li>';
-                });
-                html += '</ul>';
-                
-                container.innerHTML = html;
-            } catch (e) {
-                console.error('Failed to fetch versions:', e);
-                container.innerHTML = '<div class="error-message">⚠️ 网络问题，无法加载版本列表<br><a href="https://github.com/' + REPO + '/releases" target="_blank">前往 GitHub Releases 查看历史版本</a></div>';
-            }
+            let html = '<ul class="version-list">';
+            VERSION_HISTORY.forEach(v => {
+                html += '<li>';
+                html += '<div class="version-tag">' + v.tag + '<span class="version-date">' + v.date + '</span></div>';
+                html += '<div class="version-desc">' + v.desc + '</div>';
+                html += '<a href="' + v.url + '" class="version-download" target="_blank">下载 APK (' + v.size + ' MB)</a>';
+                html += '</li>';
+            });
+            html += '</ul>';
+            container.innerHTML = html;
         }
         
-        // 页面加载时获取最新版本信息
-        async function fetchLatestRelease() {
-            console.log('[fetchLatestRelease] 当前源:', currentSource);
-            // 添加加载状态
-            const btn = document.getElementById('download-btn');
-            btn.classList.add('switching');
-            const api_url = currentSource === 'mirror'
-                ? 'https://gh-proxy.com/https://api.github.com/repos/' + REPO + '/releases/latest'
-                : 'https://api.github.com/repos/' + REPO + '/releases/latest';
-            console.log('[fetchLatestRelease] 请求URL:', api_url);
-            try {
-                    
-                const response = await fetch(api_url);
-                const data = await response.json();
-                
-                // 更新版本号
-                document.getElementById('latest-version').textContent = data.tag_name;
-                
-                // 查找APK
-                const apk = data.assets.find(a => a.name.includes('release.apk'));
-                if (apk) {
-                    const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
-                    
-                    // 更新所有下载链接（根据当前源）
-                    const download_url = getMirrorUrl(apk.browser_download_url);
-                    document.getElementById('download-btn').href = download_url;
-                    document.getElementById('apk-size').textContent = sizeMB;
-                    document.getElementById('tech-size').textContent = sizeMB;
-                    
-                    // 更新wget命令
-                    document.getElementById('wget-cmd').textContent = 'wget ' + download_url;
-                    
-                    console.log('Latest release:', data.tag_name, apk.name, '- Source:', currentSource);
-                    document.getElementById('api-status').textContent = '✓ 成功';
-                    btn.classList.remove('switching');
-                    document.getElementById('api-status').style.color = '#166534';
-                } else {
-                    console.warn('No APK found in release assets');
-                }
-            } catch (e) {
-                console.error('Failed to fetch latest release:', e);
-                document.getElementById('debug-url').textContent = '错误: ' + e.message;
-                document.getElementById('debug-url').style.color = '#dc2626';
-                btn.classList.remove('switching');
-                // 使用硬编码版本作为fallback
-                document.getElementById('latest-version').textContent = 'v1.9.4';
-                const fallback_url = currentSource === 'mirror'
-                    ? 'https://gh-proxy.com/https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk'
-                    : 'https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk';
-                document.getElementById('download-btn').href = fallback_url;
-                document.getElementById('apk-size').textContent = '4.17';
-                document.getElementById('tech-size').textContent = '4.17';
-                document.getElementById('wget-cmd').textContent = 'wget ' + fallback_url;
-                
-                // 显示网络错误提示（根据当前源显示不同文本）
-                const sourceNote = currentSource === 'mirror' 
-                    ? '<span style="color: #dc2626;">国内镜像连接失败，使用缓存版本</span>'
-                    : '<span style="color: #dc2626;">GitHub API连接失败，使用缓存版本</span>';
-                document.getElementById('download-meta').innerHTML = 'Release版本 · R8混淆优化 · arm64-v8a架构 · ' + sourceNote;
-            }
-        }
+        // 页面加载时初始化
+        // 1. 设置版本信息
+        // 2. 渲染版本历史
+        initPage();
+        // 版本历史始终使用静态渲染
+        renderVersionHistory();信息
+
         
         // 图片加载动画
         document.querySelectorAll('.screenshot img').forEach(img => {
@@ -685,8 +601,8 @@ SDK: API 28+ (Android 9.0)<br>
             }
         });
         
-        // 页面加载时获取最新版本
-        fetchLatestRelease();
+        // 页面加载时初始化
+        initPage();
     </script>
 </body>
 </html>
