@@ -165,26 +165,44 @@
         .faq-question { font-weight: 600; color: #111; margin-bottom: 8px; }
         .faq-answer { color: #555; font-size: 14px; }
         
-        /* Footer */
-        footer {
+        /* Source Selector */
+        .source-selector {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .source-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
             text-align: center;
-            padding: 40px 0;
+        }
+        .source-btn:hover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+        .source-btn.active {
+            border-color: #2563eb;
+            background: #2563eb;
+            color: white;
+        }
+        .source-info {
+            font-size: 12px;
             color: #666;
-            font-size: 13px;
-            border-top: 1px solid #e5e7eb;
-            margin-top: 40px;
+            margin-top: 4px;
         }
-        footer a { color: #2563eb; text-decoration: none; }
-        footer a:hover { text-decoration: underline; }
         
-        /* Responsive */
-        @media (max-width: 640px) {
-            h1 { font-size: 24px; }
-            .screenshots { grid-template-columns: 1fr; }
-            .features { grid-template-columns: 1fr; }
-        }
-    
-        /* Version History */
+        /* Version List */
         .version-list {
             list-style: none;
             max-height: 400px;
@@ -226,6 +244,8 @@
         .version-download:hover {
             background: #dcfce7;
         }
+        
+        /* Error Message */
         .error-message {
             background: #fef2f2;
             border: 1px solid #fecaca;
@@ -238,44 +258,26 @@
             color: #2563eb;
             text-decoration: underline;
         }
-
-        /* Source Selector */
-        .source-selector {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-        }
-        .source-btn {
-            flex: 1;
-            padding: 10px 16px;
-            border: 2px solid #e5e7eb;
-            border-radius: 6px;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
+        
+        /* Footer */
+        footer {
             text-align: center;
-        }
-        .source-btn:hover {
-            border-color: #2563eb;
-            background: #eff6ff;
-        }
-        .source-btn.active {
-            border-color: #2563eb;
-            background: #2563eb;
-            color: white;
-        }
-        .source-info {
-            font-size: 12px;
+            padding: 40px 0;
             color: #666;
-            margin-top: 4px;
+            font-size: 13px;
+            border-top: 1px solid #e5e7eb;
+            margin-top: 40px;
         }
-</style>
+        footer a { color: #2563eb; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        
+        /* Responsive */
+        @media (max-width: 640px) {
+            h1 { font-size: 24px; }
+            .screenshots { grid-template-columns: 1fr; }
+            .features { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -305,32 +307,21 @@
                 <div class="source-info">直连 GitHub API</div>
             </button>
         </div>
-        <!-- Source Selector -->
-        <div class="source-selector">
-            <button class="source-btn active" onclick="switchSource('mirror')" id="btn-mirror">
-                🇨🇳 国内镜像
-                <div class="source-info">使用 gh-proxy 加速</div>
-            </button>
-            <button class="source-btn" onclick="switchSource('github')" id="btn-github">
-                🌐 GitHub官方
-                <div class="source-info">直连 GitHub API</div>
-            </button>
-        </div>
-        
+
         <!-- Download -->
         <div class="card">
             <div class="version-badge">
                 <span class="dot"></span>
-                <span>最新版本: <strong>v1.9.4</strong></span>
+                <span>最新版本: <strong id="latest-version">加载中...</strong></span>
             </div>
             <h2 style="margin-top: 16px;">下载</h2>
             <p>通过Android手机远程控制桌面端ZCode，支持会话管理、文件传输、屏幕共享等功能。</p>
             <br>
-            <a href="https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk" class="download-btn" target="_blank">
+            <a href="#" id="download-btn" class="download-btn" target="_blank">
                 <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                下载 APK (4.17 MB)
+                下载 APK (<span id="apk-size">--</span> MB)
             </a>
-            <p style="font-size: 13px; color: #888; margin-top: 12px; margin-bottom: 0;">Release版本 · R8混淆优化 · arm64-v8a架构</p>
+            <p style="font-size: 13px; color: #888; margin-top: 12px; margin-bottom: 0;" id="download-meta">Release版本 · R8混淆优化 · arm64-v8a架构</p>
         </div>
 
         <!-- Screenshots -->
@@ -381,7 +372,7 @@
 框架: Jetpack Compose<br>
 架构: arm64-v8a<br>
 SDK: API 28+ (Android 9.0)<br>
-大小: 4.17 MB
+大小: <span id="tech-size">--</span> MB
             </div>
         </div>
 
@@ -389,7 +380,7 @@ SDK: API 28+ (Android 9.0)<br>
         <div class="card">
             <h2>其他方式下载</h2>
             <p style="font-size: 14px; color: #555; margin-bottom: 12px;">命令行下载：</p>
-            <div class="code-block">wget https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk</div>
+            <div class="code-block" id="wget-cmd"># 正在获取链接...</div>
         </div>
 
         <!-- FAQ -->
@@ -409,9 +400,8 @@ SDK: API 28+ (Android 9.0)<br>
             </div>
         </div>
 
-
         <!-- Version History -->
-        <div class="card" id="version-history-section">
+        <div class="card">
             <h2>版本历史</h2>
             <p style="font-size: 14px; color: #888; margin-bottom: 16px;">
                 <a href="#" id="show-all-versions" onclick="fetchAllVersions(); return false;">查看所有版本</a>
@@ -420,6 +410,7 @@ SDK: API 28+ (Android 9.0)<br>
                 <p style="color: #999; font-size: 14px;">加载中...</p>
             </div>
         </div>
+
         <!-- Footer -->
         <footer>
             <p>由 <strong>Damian2012</strong> 开发</p>
@@ -432,8 +423,7 @@ SDK: API 28+ (Android 9.0)<br>
         </footer>
     </div>
 
-
-        <script>
+    <script>
         const REPO = 'Damianjiang/ZCode-Android';
         let currentSource = 'mirror'; // 默认国内镜像
         
@@ -511,22 +501,30 @@ SDK: API 28+ (Android 9.0)<br>
                 const response = await fetch(api_url);
                 const data = await response.json();
                 
+                // 更新版本号
                 document.getElementById('latest-version').textContent = data.tag_name;
                 
+                // 查找APK
                 const apk = data.assets.find(a => a.name.includes('release.apk'));
                 if (apk) {
                     const sizeMB = (apk.size / 1024 / 1024).toFixed(2);
-                    const download_url = getMirrorUrl(apk.browser_download_url);
                     
+                    // 更新所有下载链接（根据当前源）
+                    const download_url = getMirrorUrl(apk.browser_download_url);
                     document.getElementById('download-btn').href = download_url;
                     document.getElementById('apk-size').textContent = sizeMB;
                     document.getElementById('tech-size').textContent = sizeMB;
+                    
+                    // 更新wget命令
                     document.getElementById('wget-cmd').textContent = 'wget ' + download_url;
                     
-                    console.log('Latest:', data.tag_name, '- Source:', currentSource);
+                    console.log('Latest release:', data.tag_name, apk.name, '- Source:', currentSource);
+                } else {
+                    console.warn('No APK found in release assets');
                 }
             } catch (e) {
                 console.error('Failed to fetch latest release:', e);
+                // 使用硬编码版本作为fallback
                 document.getElementById('latest-version').textContent = 'v1.9.4';
                 const fallback_url = currentSource === 'mirror'
                     ? 'https://gh-proxy.com/https://github.com/Damianjiang/ZCode-Android/releases/download/v1.9.4/app-release.apk'
@@ -536,6 +534,7 @@ SDK: API 28+ (Android 9.0)<br>
                 document.getElementById('tech-size').textContent = '4.17';
                 document.getElementById('wget-cmd').textContent = 'wget ' + fallback_url;
                 
+                // 显示网络错误提示
                 document.getElementById('download-meta').innerHTML = 'Release版本 · R8混淆优化 · arm64-v8a架构 · <span style="color: #dc2626;">网络连接异常，使用缓存版本</span>';
             }
         }
@@ -555,6 +554,5 @@ SDK: API 28+ (Android 9.0)<br>
         // 页面加载时获取最新版本
         fetchLatestRelease();
     </script>
-
 </body>
 </html>
