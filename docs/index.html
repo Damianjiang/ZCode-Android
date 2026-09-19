@@ -193,7 +193,7 @@
             100% { background-position: -200% 0; }
         }
 </style>
-</head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://api.github.com; connect-src 'self' https://api.github.com http://127.0.0.1:*; img-src 'self' https://raw.githubusercontent.com data:; style-src 'self' 'unsafe-inline';"></head>
 <body>
     <div class="container">
         <!-- Header -->
@@ -344,6 +344,7 @@ SDK: API 28+ (Android 9.0)<br>
                 document.getElementById('latest-version').textContent = 'v1.9.4';
                 document.getElementById('apk-size').textContent = '4.17';
                 document.getElementById('tech-size').textContent = '4.17';
+                console.warn('Using fallback version due to CORS/network error');
             }
         }
         
