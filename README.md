@@ -7,6 +7,8 @@ Android 端的 ZCode 远程控制客户端。通过逆向官方 Web 远程控制
 
 Kotlin + Jetpack Compose（Material 3）编写，全部代码为独立实现。
 
+> **AI 参与说明**：本项目在开发过程中有 AI（大语言模型）辅助编写部分代码；整体架构与核心协议实现由项目作者独立完成并负责，AI 辅助产出经人工审查、修正后纳入代码库。
+
 📱 **在线预览**: [damianjiang.github.io/ZCode-Android](https://damianjiang.github.io/ZCode-Android)
 
 <p align="center">
